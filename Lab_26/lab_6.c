@@ -18,19 +18,11 @@ typedef enum{
     STATUS_MAX_ITERATIONS
 }Status;
 
-Status machine_eps(double *eps){
-    if (eps == NULL)
-        return STATUS_NULL_ARGUMENT;
-    while ((1.0 + *eps/2.0) != 1.0)
-        *eps /= 2.0;
-    return STATUS_OK;
-}
-
 Status function_1(const int count, const double eps, ...){
     if (count < 3)
         return STATUS_INVALID_COUNT;
 
-    if (eps <= 0)
+    if (!isfinite(eps) || eps <= 0)
         return STATUS_INVALID_EPSILON;
 
     va_list coordinate;
@@ -240,8 +232,10 @@ Status function_4(double *res, const int count, ...){
     va_list numbers;
     va_start(numbers, count);
 
-     if (count <= 0)
+     if (count <= 0){
+        va_end(numbers);
         return STATUS_INVALID_COUNT;
+     }
 
     double log_sum = 0.0;
 
@@ -273,7 +267,7 @@ Status function_4(double *res, const int count, ...){
     return STATUS_OK;
 }
 
-Status function_5(double x, long long n, double *res){
+Status function_5(const double x, const long long n, double *res){
     if (res == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -289,6 +283,8 @@ Status function_5(double x, long long n, double *res){
         return STATUS_INVALID_ARGUMENT;
 
     if (n < 0) {
+        if (n == LLONG_MIN)
+            return STATUS_OVERFLOW;
         double temp;
         Status status;
 
@@ -346,11 +342,10 @@ Status function_5(double x, long long n, double *res){
 
 Status function_6(const double *left, const double *right, const double *eps, double (*function)(double), double *res)
 {
-    if (left == NULL || right == NULL ||
-        eps == NULL || function == NULL || res == NULL)
+    if (left == NULL || right == NULL || eps == NULL || function == NULL || res == NULL)
         return STATUS_NULL_ARGUMENT;
 
-    if (*eps <= 0)
+    if (!isfinite(*eps) || *eps <= 0)
         return STATUS_INVALID_EPSILON;
 
     if (*left >= *right)
@@ -375,8 +370,7 @@ Status function_6(const double *left, const double *right, const double *eps, do
         return STATUS_OK;
     }
 
-    if ((fa > 0 && fb > 0) ||
-        (fa < 0 && fb < 0))
+    if ((fa > 0 && fb > 0) || (fa < 0 && fb < 0))
         return STATUS_NO_ROOT;
 
     int max_iterations = 10000000;
@@ -398,7 +392,7 @@ Status function_6(const double *left, const double *right, const double *eps, do
             return STATUS_OK;
         }
 
-        if ((fa < *eps && fc > *eps) || (fa > *eps && fc < *eps)) {
+        if ((fa < 0 && fc > 0) || (fa > 0 && fc < 0)) {
             b = c;
             fb = fc;
         } else {
@@ -412,15 +406,15 @@ Status function_6(const double *left, const double *right, const double *eps, do
 }
 
 
-double equation_1(double x){
+double equation_1(const double x){
     return x * x - 2.0;
 }
 
-double equation_2(double x){
+double equation_2(const double x){
     return x * x * x - x - 2.0;
 }
 
-double equation_3(double x){
+double equation_3(const double x){
     return sin(x) - 0.5;
 }
 
@@ -446,6 +440,7 @@ int main(int argc, char *argv[]){
             int count = 4;
 
             Status status = function_1(count, eps, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0);
+            // Status status = function_1(count, eps, 0.0, 0.0, 2.0, 0.0, 1.0, 1.0, 2.0, 2.0, 0.0, 2.0);
 
             printf("Функция 1: ");
 
