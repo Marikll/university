@@ -50,23 +50,26 @@ Status flag_i(FILE * input, FILE * output){
 
     int symbol;
     int count = 0;
+    int flag = 0;
     while ((symbol = fgetc(input)) != EOF){
         if (symbol == '\n'){
             if(fprintf( output, "%d\n", count) < 0)
                 return STATUS_OUTPUT_ERROR;
             count = 0;
+            flag = 1;
         } else {
             if ((symbol >= 'A' && symbol <= 'Z') || (symbol >= 'a' && symbol <= 'z'))
                 count++;
+            flag = 0;
         }
     }
 
     if (ferror(input))
         return STATUS_INPUT_ERROR;
-
-    if(fprintf( output, "%d", count) < 0)
-        return STATUS_OUTPUT_ERROR;
-
+    if (!flag){
+        if(fprintf( output, "%d", count) < 0)
+            return STATUS_OUTPUT_ERROR;
+    }
     return STATUS_OK;
 }
 
@@ -115,6 +118,9 @@ Status flag_a(FILE* input, FILE* output){
                 return STATUS_OUTPUT_ERROR;
         }
     }
+    if (ferror(input))
+        return STATUS_INPUT_ERROR;
+
     return STATUS_OK;
 }
 
