@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <float.h>
+#include <limits.h>
 
 typedef enum{
     STATUS_OK,
@@ -88,9 +89,9 @@ Status sum_c(const double eps, double *x, double *res){
     double new_sum;
     int max_iterations = 10000000;
     int iterators = 0;
+    if (fabs(x1 - 1) < eps || x1 > (1 + eps))
+        return STATUS_INVALID_OPERATION;
     while (1){
-        if (fabs(x1 - 1) < eps || x1 > (1 + eps))
-            return STATUS_INVALID_OPERATION;
         iterators++;
         if (iterators >= max_iterations)
             return STATUS_MAX_ITERATIONS;
@@ -117,9 +118,9 @@ Status sum_d(const double eps, double *x, double *res){
     double new_sum;
     int max_iterations = 10000000;
     int iterators = 0;
+    if (x1 > (1 + eps))
+        return STATUS_INVALID_OPERATION;
     while (1){
-        if (x1 > (1 + eps))
-            return STATUS_INVALID_OPERATION;
         iterators++;
         if (iterators >= max_iterations)
              return STATUS_MAX_ITERATIONS;
@@ -146,11 +147,14 @@ double function_b(double x){
     return exp(-(x * x)/2);
 }
 
-double function_c(double t){
-    if (t == 0)
+double function_c(double x){
+    if (x >= 1.0)
+        return 0.0;
+    
+    if (x == 0.0)
         return 0.0;
 
-    return -4.0 * t * log(t);
+    return -log(1.0 - x);
 }
 
 double function_d(double x){
@@ -213,82 +217,114 @@ Status integral(const double eps, double *res, const int flag){
 }
 
 
-Status conversion_num(const char *str, double *x, const char flag)
-{
-    if (str == NULL || x == NULL)
-        return STATUS_NULL_ARGUMENT;
+Status conversion_num(const char *str, double *num, int flag_eps){ 
+    if (str == NULL || num == NULL) 
+        return STATUS_NULL_ARGUMENT; 
 
-    if (str[0] == '\0')
-        return STATUS_EMPTY_STRING;
-
+    if (str[0] == '\0') 
+        return STATUS_EMPTY_STRING; 
+    
     int i = 0;
-    int sign = 1;
-
-    if (str[i] == '-' || str[i] == '+') {
-        if (str[i] == '-')
-            sign = -1;
-
-        i++;
-
-        if (str[i] == '\0')
-            return STATUS_NO_DIGITS;
-    }
-
-    double value = 0.0;
-    double fraction = 0.0;
-    double divider = 10.0;
-
-    int point = 0;
-    int digits = 0;
-
-    for (; str[i] != '\0'; i++) {
-
-        if (str[i] == '.' || str[i] == ',') {
-
-            if (point != 0)
-                return STATUS_INVALID_NUMBER;
-
+    int sign = 1; 
+    
+    if (str[i] == '-' || str[i] == '+'){ 
+        if (str[i] == '-') 
+            sign = -1; i++; 
+        if (str[i] == '\0') 
+            return STATUS_NO_DIGITS; 
+    } 
+    if (str[i] < '0' || str[i] > '9')
+        return STATUS_INVALID_NUMBER;
+    
+    double value = 0.0; 
+    double fraction = 0.0; 
+    double divider = 10.0; 
+    int point = 0; 
+    int digits = 0; 
+    
+    for (; str[i] != '\0' && str[i] != 'e' && str[i] != 'E'; i++){ 
+        if (str[i] == '.' || str[i] == ','){ 
+            if (point != 0) 
+                return STATUS_INVALID_NUMBER; 
+                
             point = 1;
-            continue;
-        }
+            continue; 
+        } 
+        if (str[i] < '0' || str[i] > '9') 
+            return STATUS_INVALID_NUMBER; 
+        
+        int digit = str[i] - '0'; 
+        digits++; 
 
-        if (str[i] < '0' || str[i] > '9')
+        if (point == 0){ 
+            if (value > (DBL_MAX - digit) / 10.0) 
+                return STATUS_OVERFLOW; 
+            
+            value = value * 10.0 + digit; 
+        } else{ 
+            fraction += digit / divider; 
+            divider *= 10.0; 
+        } 
+    } 
+    if (digits == 0) 
+        return STATUS_NO_DIGITS; 
+
+    value += fraction; 
+
+    if ((str[i] == 'e' || str[i] == 'E') && flag_eps == 0)
             return STATUS_INVALID_NUMBER;
+    else if (flag_eps == 1){
+        if (str[i] == 'e' || str[i] == 'E'){ 
+            i++; 
+            int exponent_sign = 1; 
+            if (str[i] == '+' || str[i] == '-'){ 
+                if (str[i] == '-') 
+                    exponent_sign = -1; 
+                i++; 
+            } 
+            if (str[i] == '\0') 
+                return STATUS_NO_DIGITS; 
+        
+            int exponent = 0; 
+            int exponent_digits = 0; 
+            while (str[i] != '\0'){ 
+                if (str[i] < '0' || str[i] > '9') 
+                    return STATUS_INVALID_NUMBER; 
+            
+                int digit = str[i] - '0'; 
+                exponent_digits++;  
+            
+                if (exponent > (INT_MAX - digit) / 10) 
+                    return STATUS_OVERFLOW; 
+                
+                exponent = exponent * 10 + digit; 
+                i++; 
+            } 
+        
+            if (exponent_digits == 0) 
+                return STATUS_NO_DIGITS; 
+        
+            exponent *= exponent_sign; 
+            double multiplier = pow(10.0, exponent); 
+        
+            if (!isfinite(multiplier)) 
+                return STATUS_OVERFLOW; 
+            
+            value *= multiplier; 
+        
+            if (!isfinite(value)) 
+                return STATUS_OVERFLOW; 
+        } 
 
-        int digit = str[i] - '0';
-        digits++;
-
-        if (point == 0) {
-
-            if (value > (DBL_MAX - digit) / 10.0)   /*Поменять DBL_MAX*/
-                return STATUS_OVERFLOW;
-
-            value = value * 10.0 + digit;
-        }
-
-        else {
-
-            fraction += digit / divider;
-            divider *= 10.0;
-        }
-    }
-
-    if (digits == 0)
-        return STATUS_NO_DIGITS;
-
-    value += fraction;
-
-    if (flag == -1){
         if (sign == -1)
             return STATUS_SIGNED_NUMBER;
     } else{
-        if (sign == -1)
-            value = -value;
+        if (sign == -1) 
+            value = -value; 
     }
 
-    *x = value;
-
-    return STATUS_OK;
+    *num = value; 
+    return STATUS_OK; 
 }
 
 void print_result(const char *name, Status status, double result){
@@ -339,7 +375,7 @@ int main(int argc, char *argv[]){
     }
 
     double cust_eps = 0.0;
-    int flag = -1;
+    int flag = 1;
     Status status_eps = conversion_num(argv[1], &cust_eps, flag);
 
     switch(status_eps){
@@ -383,7 +419,7 @@ int main(int argc, char *argv[]){
     }
 
     double cust_x = 0.0;
-    flag = 1;
+    flag = 0;
     Status status_x = conversion_num(argv[2], &cust_x, flag);
 
     switch(status_x){
@@ -442,10 +478,11 @@ int main(int argc, char *argv[]){
 
     status = sum_d(cust_eps, &cust_x, &result);
     print_result("сумма d", status, result);
-
+    
+    const char* integral_names[] = {"интеграл a", "интеграл b", "интеграл c", "интеграл d"};
     for (int i = 1; i < 5; i++){
         status = integral(cust_eps, &result, i);
-        print_result("интеграл", status, result);
+        print_result(integral_names[i-1], status, result);
     }
 
     return 0;
