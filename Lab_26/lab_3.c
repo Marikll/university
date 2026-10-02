@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <float.h>
+#include <limits.h>
 
 typedef enum{
     STATUS_NULL_ARGUMENT,
@@ -15,57 +16,52 @@ typedef enum{
     STATUS_FLAG_M,
     STATUS_FLAG_T,
     STATUS_NO_DIGITS,
-    STATUS_OVERFLOW
+    STATUS_OVERFLOW,
+    STATUS_INVALID_NUMBER,
+    STATUS_SIGNED_NUMBER
 } Status;
 
 Status flag_q(const double eps, double *a, double *b, double *c, double res[], int *cur){
     if (a == NULL || b == NULL || c == NULL)
         return STATUS_NULL_ARGUMENT;
-    
+
+    if (eps <= 0.0) return STATUS_INVALID_NUMBERS;
+
     double a1 = *a, b1 = *b, c1 = *c;
     if (fabs(a1) <= eps && fabs(b1) <= eps && fabs(c1) <= eps)
         return STATUS_ANY_SOLUTION;
-    double variants[6][3];
+
+    double variants[6][3] = { 
+        {a1, b1, c1}, 
+        {a1, c1, b1}, 
+        {b1, a1, c1}, 
+        {b1, c1, a1}, 
+        {c1, a1, b1}, 
+        {c1, b1, a1} 
+    };
+
     int var_count = 0;
     *cur = 0;
     double add_var;
     for (int k = 0; k < 6; k++){
         int double_var = 0;
         for (int i = 0; i < var_count; i++){
-            if ( fabs(variants[i][0] - a1) < eps &&  fabs(variants[i][1] - b1) < eps && fabs(variants[i][2] - c1) < eps){
+            if ( fabs(variants[i][0] - variants[k][0]) < eps &&  fabs(variants[i][1] - variants[k][1]) < eps && fabs(variants[i][2] - variants[k][2]) < eps){
                 double_var = 1;
                 break;
             }
         }
-        if (double_var == 0){
-            variants[var_count][0] = a1;
-            variants[var_count][1] = b1;
-            variants[var_count][2] = c1;
-            var_count++;
-        } else{
-            if (k == 1 || k == 4){
-                add_var = b1;
-                b1 = c1;
-                c1 = add_var;
-            }
-            if (k == 2){
-                add_var = a1;
-                a1 = b1;
-                b1 = c1;
-                c1 = add_var;
-            }
-            if (k == 3){
-                add_var = a1;
-                a1 = b1;
-                b1 = add_var;
-            }
-            if (k == 5){
-                add_var = a1;
-                a1 = c1;
-                c1 = add_var;
-            }
+        if (double_var)
             continue;
-        } 
+        variants[var_count][0] = variants[k][0];
+        variants[var_count][1] = variants[k][1];
+        variants[var_count][2] = variants[k][2];
+        var_count++;
+
+        a1 = variants[k][0];
+        b1 = variants[k][1];
+        c1 = variants[k][2];
+
         if ((fabs(a1) <= eps && fabs(c1) <= eps) || (fabs(b1) <= eps && fabs(c1) <= eps)){
             res[*cur] = 0.0;
             (*cur)++; /* в случае, когда среди коэф. два нуля: решение только 0 или нет решений вовсе*/
@@ -86,28 +82,8 @@ Status flag_q(const double eps, double *a, double *b, double *c, double res[], i
                 (*cur)++;
             }
         }
-        if (k == 0 || k == 3){
-            add_var = b1;
-            b1 = c1;
-            c1 = add_var;
-        }
-        if (k == 1){
-            add_var = a1;
-            a1 = b1;
-            b1 = c1;
-            c1 = add_var;
-        }
-        if (k == 2){
-            add_var = a1;
-            a1 = b1;
-            b1 = add_var;
-        }
-        if (k == 4){
-            add_var = a1;
-            a1 = c1;
-            c1 = add_var;
-        }
     }
+    
 
     if (*cur>0)
         return STATUS_OK;
@@ -206,75 +182,114 @@ Status check_number(const char * str, long long * num){
     return STATUS_OK;
 }
 
-Status conversion_num(const char *str, double *num){
-    if (str == NULL || num == NULL)
-        return STATUS_NULL_ARGUMENT;
+Status conversion_num(const char *str, double *num, int flag_eps){ 
+    if (str == NULL || num == NULL) 
+        return STATUS_NULL_ARGUMENT; 
 
-    if (str[0] == '\0')
-        return STATUS_EMPTY_STRING;
-
+    if (str[0] == '\0') 
+        return STATUS_EMPTY_STRING; 
+    
     int i = 0;
-    int sign = 1;
-
-    if (str[i] == '-' || str[i] == '+') {
-        if (str[i] == '-')
-            sign = -1;
-
-        i++;
-
-        if (str[i] == '\0')
-            return STATUS_NO_DIGITS;
-    }
-
-    double value = 0.0;
-    double fraction = 0.0;
-    double divider = 10.0;
-
-    int point = 0;
-    int digits = 0;
-
-    for (; str[i] != '\0'; i++) {
-
-        if (str[i] == '.' || str[i] == ',') {
-
-            if (point != 0)
-                return STATUS_INVALID_NUMBERS;
-
+    int sign = 1; 
+    
+    if (str[i] == '-' || str[i] == '+'){ 
+        if (str[i] == '-') 
+            sign = -1; i++; 
+        if (str[i] == '\0') 
+            return STATUS_NO_DIGITS; 
+    } 
+    if (str[i] < '0' || str[i] > '9')
+        return STATUS_INVALID_NUMBER;
+    
+    double value = 0.0; 
+    double fraction = 0.0; 
+    double divider = 10.0; 
+    int point = 0; 
+    int digits = 0; 
+    
+    for (; str[i] != '\0' && str[i] != 'e' && str[i] != 'E'; i++){ 
+        if (str[i] == '.' || str[i] == ','){ 
+            if (point != 0) 
+                return STATUS_INVALID_NUMBER; 
+                
             point = 1;
-            continue;
-        }
+            continue; 
+        } 
+        if (str[i] < '0' || str[i] > '9') 
+            return STATUS_INVALID_NUMBER; 
+        
+        int digit = str[i] - '0'; 
+        digits++; 
 
-        if (str[i] < '0' || str[i] > '9')
+        if (point == 0){ 
+            if (value > (DBL_MAX - digit) / 10.0) 
+                return STATUS_OVERFLOW; 
+            
+            value = value * 10.0 + digit; 
+        } else{ 
+            fraction += digit / divider; 
+            divider *= 10.0; 
+        } 
+    } 
+    if (digits == 0) 
+        return STATUS_NO_DIGITS; 
+
+    value += fraction; 
+
+    if ((str[i] == 'e' || str[i] == 'E') && flag_eps == 0)
             return STATUS_INVALID_NUMBERS;
+    else if (flag_eps == 1){
+        if (str[i] == 'e' || str[i] == 'E'){ 
+            i++; 
+            int exponent_sign = 1; 
+            if (str[i] == '+' || str[i] == '-'){ 
+                if (str[i] == '-') 
+                    exponent_sign = -1; 
+                i++; 
+            } 
+            if (str[i] == '\0') 
+                return STATUS_NO_DIGITS; 
+        
+            int exponent = 0; 
+            int exponent_digits = 0; 
+            while (str[i] != '\0'){ 
+                if (str[i] < '0' || str[i] > '9') 
+                    return STATUS_INVALID_NUMBER; 
+            
+                int digit = str[i] - '0'; 
+                exponent_digits++;  
+            
+                if (exponent > (INT_MAX - digit) / 10) 
+                    return STATUS_OVERFLOW; 
+                
+                exponent = exponent * 10 + digit; 
+                i++; 
+            } 
+        
+            if (exponent_digits == 0) 
+                return STATUS_NO_DIGITS; 
+        
+            exponent *= exponent_sign; 
+            double multiplier = pow(10.0, exponent); 
+        
+            if (!isfinite(multiplier)) 
+                return STATUS_OVERFLOW; 
+            
+            value *= multiplier; 
+        
+            if (!isfinite(value)) 
+                return STATUS_OVERFLOW; 
+        } 
 
-        int digit = str[i] - '0';
-        digits++;
-
-        if (point == 0) {
-
-            if (value > (DBL_MAX - digit) / 10.0)   /*Поменять DBL_MAX*/
-                return STATUS_OVERFLOW;
-
-            value = value * 10.0 + digit;
-        }
-
-        else {
-
-            fraction += digit / divider;
-            divider *= 10.0;
-        }
+        if (sign == -1)
+            return STATUS_SIGNED_NUMBER;
+    } else{
+        if (sign == -1) 
+            value = -value; 
     }
 
-    if (digits == 0)
-        return STATUS_NO_DIGITS;
-
-    value += fraction;
-
-    if (sign == -1)
-        *num = -value;
-    else
-        *num = value;
-    return STATUS_OK;
+    *num = value; 
+    return STATUS_OK; 
 }
 
 int main(int argc, char *argv[]){
@@ -303,7 +318,8 @@ int main(int argc, char *argv[]){
                 return 1;
             }
             double eps = 0.0;
-            Status st_eps = conversion_num(argv[2], &eps);
+            int flag_eps = 1;
+            Status st_eps = conversion_num(argv[2], &eps, flag_eps);
 
             switch(st_eps){
                 case STATUS_NULL_ARGUMENT:
@@ -342,10 +358,11 @@ int main(int argc, char *argv[]){
             double a = 0.0;
             double b = 0.0;
             double c = 0.0;
+            flag_eps = 0;
 
-            Status st_a = conversion_num(argv[3], &a);
-            Status st_b = conversion_num(argv[4], &b);
-            Status st_c = conversion_num(argv[5], &c);
+            Status st_a = conversion_num(argv[3], &a, flag_eps);
+            Status st_b = conversion_num(argv[4], &b, flag_eps);
+            Status st_c = conversion_num(argv[5], &c, flag_eps);
 
             if (st_a == STATUS_NULL_ARGUMENT || st_b == STATUS_NULL_ARGUMENT || st_c == STATUS_NULL_ARGUMENT){
                 printf("Внутренняя ошибка: введите флаг и соответствующее ему количество чисел еще раз.\n");
@@ -388,7 +405,7 @@ int main(int argc, char *argv[]){
                 if (st_q == STATUS_OK){
                     printf("Корни уравнения: ");
                     for (int i = 0; i < cur; i++)
-                        printf("%.5g, ", results[i]);
+                        printf("%.5g ", results[i]);
                     printf("\n");
                 }
                 break;
@@ -457,7 +474,8 @@ int main(int argc, char *argv[]){
             }
 
             double eps = 0.0;
-            Status st_eps = conversion_num(argv[2], &eps);
+            int flag_eps = 1;
+            Status st_eps = conversion_num(argv[2], &eps, flag_eps);
 
             switch(st_eps){
                 case STATUS_NULL_ARGUMENT:
@@ -496,10 +514,11 @@ int main(int argc, char *argv[]){
             double x = 0.0;
             double y = 0.0;
             double z = 0.0;
+            flag_eps = 0;
 
-            Status st_x = conversion_num(argv[3], &x);
-            Status st_y = conversion_num(argv[4], &y);
-            Status st_z = conversion_num(argv[5], &z);
+            Status st_x = conversion_num(argv[3], &x, flag_eps);
+            Status st_y = conversion_num(argv[4], &y, flag_eps);
+            Status st_z = conversion_num(argv[5], &z, flag_eps);
 
             if (st_x == STATUS_NULL_ARGUMENT || st_y == STATUS_NULL_ARGUMENT || st_z == STATUS_NULL_ARGUMENT){
                 printf("Внутренняя ошибка: введите флаг и соответствующее ему количество чисел еще раз.\n");
