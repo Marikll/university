@@ -12,7 +12,8 @@ typedef enum{
     STATUS_EMPTY_STRING,
     STATUS_MACHINE_LIMIT,
     STATUS_MAX_ITERATIONS,
-    STATUS_INVALID_OPERATION
+    STATUS_INVALID_OPERATION,
+    STATUS_SMALL_NUMBER
 } Status;
 
 Status machine_epsilon(double *eps){
@@ -381,6 +382,222 @@ Status sqrt2_limit(const double *eps, double *res){
     }
 }
 
+Status check_prime(const long long *num, int *result)
+{
+    if (num == NULL || result == NULL)
+        return STATUS_NULL_ARGUMENT;
+
+    if (*num < 2) {
+        *result = 0;
+        return STATUS_OK;
+    }
+
+    if (*num == 2) {
+        *result = 1;
+        return STATUS_OK;
+    }
+
+    if (*num % 2 == 0) {
+        *result = 0;
+        return STATUS_OK;
+    }
+
+    for (long long i = 3; i <= *num/i; i += 2) {
+
+        if (*num % i == 0) {
+            *result = 0;
+            return STATUS_OK;
+        }
+    }
+
+    *result = 1;
+
+    return STATUS_OK;
+}
+
+
+Status gamma_series(const double *eps, double *res)
+{
+    if (eps == NULL || res == NULL)
+        return STATUS_NULL_ARGUMENT;
+
+    if (*eps <= 0)
+        return STATUS_SMALL_NUMBER;
+
+    double pi;
+    Status status;
+
+    status = pi_series(eps, &pi);
+
+    if (status != STATUS_OK)
+        return status;
+
+    double sum = -pi * pi / 6.0;
+    double previous_sum = sum;
+    double term;
+
+    long long k = 2;
+
+    int iterators = 0;
+    const int max_iterations = 1000000;
+
+    while (1) {
+
+        long long root = (long long)sqrt((double)k);
+
+        term = (1.0 / ((double)root * root)) - 1.0 / k;
+
+        if (sum + term == sum && module_num(term) > *eps)
+            return STATUS_MACHINE_LIMIT;
+
+        previous_sum = sum;
+        sum += term;
+
+        if (!isfinite(sum))
+            return STATUS_OVERFLOW;
+
+        if (module_num(sum - previous_sum) <= *eps) {
+            *res = sum;
+            return STATUS_OK;
+        }
+
+        k++;
+        iterators++;
+
+        if (iterators >= max_iterations)
+            return STATUS_MAX_ITERATIONS;
+    }
+}
+
+Status gamma_equation(const double *eps, double *res)
+{
+    if (eps == NULL || res == NULL)
+        return STATUS_NULL_ARGUMENT;
+
+    if (*eps <= 0)
+        return STATUS_SMALL_NUMBER;
+
+    double product = 1.0;
+
+    long long t = 2;
+
+    int prime;
+    Status status;
+
+    product *= (2.0 - 1.0) / 2.0;
+
+    double current_argument = log(2.0) * product;
+
+    if (current_argument <= 0.0)
+        return STATUS_INVALID_OPERATION;
+
+    double current = -log(current_argument);
+    double next;
+
+    int iterators = 0;
+    const int max_iterations = 1000000;
+
+    while (1) {
+
+        t++;
+
+        status = check_prime(&t, &prime);
+
+        if (status != STATUS_OK)
+            return status;
+
+        if (prime)
+            product *= ((double)t - 1.0) / t;
+
+        current_argument = log((double)t) * product;
+
+        if (current_argument <= 0.0)
+            return STATUS_INVALID_OPERATION;
+
+        next = -log(current_argument);
+
+        if (module_num(next - current) <= *eps) {
+            *res = next;
+            return STATUS_OK;
+        }
+
+        if (next == current)
+            return STATUS_MACHINE_LIMIT;
+
+        iterators++;
+
+        if (iterators >= max_iterations)
+            return STATUS_MAX_ITERATIONS;
+
+        current = next;
+    }
+}
+
+Status gamma_limit(const double *eps, double *res)
+{
+    if (eps == NULL || res == NULL)
+        return STATUS_NULL_ARGUMENT;
+
+    if (*eps <= 0)
+        return STATUS_SMALL_NUMBER;
+
+    double current = 0.0;
+    double next;
+
+    long long m = 1;
+
+    int iterators = 0;
+    const int max_iterations = 1000000;
+
+    while (1) {
+
+        m++;
+
+        double sum = 0.0;
+        double combination = 1.0;
+        double log_factorial = 0.0;
+
+        for (long long k = 1; k <= m; k++) {
+
+            combination *=
+                (double)(m - k + 1) / k;
+
+            log_factorial += log((double)k);
+
+            double term =
+                combination *
+                log_factorial /
+                k;
+
+            if (!isfinite(combination) ||
+                !isfinite(term))
+                return STATUS_OVERFLOW;
+
+            if (k % 2 == 0)
+                sum += term;
+            else
+                sum -= term;
+        }
+
+        next = sum;
+
+        if (module_num(next - current) <= *eps) {
+            *res = next;
+            return STATUS_OK;
+        }
+
+        if (next == current)
+            return STATUS_MACHINE_LIMIT;
+
+        current = next;
+
+        iterators++;
+
+        if (iterators >= max_iterations)
+            return STATUS_MAX_ITERATIONS;
+    }
+}
+
 Status conversion_num(const char *str, double *custom_eps)
 {
     if (str == NULL || custom_eps == NULL)
@@ -544,8 +761,11 @@ int main(int argc, char *argv[]){
         }
     }
 
-    if (cust_eps <= machine_eps) {
+    if (cust_eps > 0 && cust_eps <= machine_eps) {
         printf("Ошибка: epsilon слишком мало для типа double.\n");
+        return 1;
+    } else if (cust_eps <= 0){
+        printf("Ошибка: epsilon должно быть положительным.\n");
         return 1;
     }
 
@@ -593,14 +813,14 @@ int main(int argc, char *argv[]){
     print_result("sqrt 2 (предел)", status, result);
 
 
-    // status = gamma_series(cust_eps, &result);
-    // print_result("gamma (ряд)", status, result);
+    status = gamma_series(&cust_eps, &result);
+    print_result("gamma (ряд)", status, result);
 
-    // status = gamma_equation(cust_eps, &result);
-    // print_result("gamma (уравнение)", status, result);
+    status = gamma_equation(&cust_eps, &result);
+    print_result("gamma (уравнение)", status, result);
 
-    // status = gamma_limit(cust_eps, &result);
-    // print_result("gamma (предел)", status, result);
+    status = gamma_limit(&cust_eps, &result);
+    print_result("gamma (предел)", status, result);
 
     return 0;
 }
