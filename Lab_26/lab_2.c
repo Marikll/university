@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <float.h>
+#include <limits.h>
 
 typedef enum{
     STATUS_OK,
@@ -29,15 +30,6 @@ double module_num(double num){
         num = -num;
     return num;
 }
-
-// int ipow(double base, int exponent) {
-//     double result = 1;
-//     for (int i = 0; i < exponent; ++i) {
-//         result *= base;
-//     }
-//     return result;
-// }
-
 
 Status e_series(const double *eps, double *res){
     if (eps == NULL || res == NULL)
@@ -139,7 +131,6 @@ Status pi_series(const double *eps, double *res){
         if (sum + term == sum && module_num(term) > *eps)
             return STATUS_MACHINE_LIMIT;
     }
-    sum += term;  
     *res = sum;
     return STATUS_OK;
 }
@@ -227,7 +218,6 @@ Status ln2_series(const double *eps, double *res){
         if (sum + term == sum && module_num(term) > *eps)
             return STATUS_MACHINE_LIMIT;
     }
-    sum += term;
     *res = sum;
     return STATUS_OK;
 }
@@ -598,77 +588,108 @@ Status gamma_limit(const double *eps, double *res)
     }
 }
 
-Status conversion_num(const char *str, double *custom_eps)
-{
-    if (str == NULL || custom_eps == NULL)
-        return STATUS_NULL_ARGUMENT;
+Status conversion_num(const char *str, double *custom_eps){ 
+    if (str == NULL || custom_eps == NULL) 
+        return STATUS_NULL_ARGUMENT; 
 
-    if (str[0] == '\0')
-        return STATUS_EMPTY_STRING;
-
+    if (str[0] == '\0') 
+        return STATUS_EMPTY_STRING; 
+    
     int i = 0;
-    int sign = 1;
+    int sign = 1; 
+    
+    if (str[i] == '-' || str[i] == '+'){ 
+        if (str[i] == '-') 
+            sign = -1; i++; 
+        if (str[i] == '\0') 
+            return STATUS_NO_DIGITS; 
+    } 
+    if (str[i] < '0' || str[i] > '9')
+        return STATUS_INVALID_NUMBER;
+    
+    double value = 0.0; 
+    double fraction = 0.0; 
+    double divider = 10.0; 
+    int point = 0; 
+    int digits = 0; 
+    
+    for (; str[i] != '\0' && str[i] != 'e' && str[i] != 'E'; i++){ 
 
-    if (str[i] == '-' || str[i] == '+') {
-        if (str[i] == '-')
-            sign = -1;
-
-        i++;
-
-        if (str[i] == '\0')
-            return STATUS_NO_DIGITS;
-    }
-
-    double value = 0.0;
-    double fraction = 0.0;
-    double divider = 10.0;
-
-    int point = 0;
-    int digits = 0;
-
-    for (; str[i] != '\0'; i++) {
-
-        if (str[i] == '.' || str[i] == ',') {
-
-            if (point != 0)
-                return STATUS_INVALID_NUMBER;
-
+        if (str[i] == '.' || str[i] == ','){ 
+            if (point != 0) 
+                return STATUS_INVALID_NUMBER; 
+                
             point = 1;
-            continue;
-        }
+            continue; 
+        } 
+        if (str[i] < '0' || str[i] > '9') 
+            return STATUS_INVALID_NUMBER; 
+        
+        int digit = str[i] - '0'; 
+        digits++; 
 
-        if (str[i] < '0' || str[i] > '9')
-            return STATUS_INVALID_NUMBER;
+        if (point == 0){ 
+            if (value > (DBL_MAX - digit) / 10.0) 
+                return STATUS_OVERFLOW; 
+            
+            value = value * 10.0 + digit; 
+        } else{ 
+            fraction += digit / divider; 
+            divider *= 10.0; 
+        } 
+    } 
+    if (digits == 0) 
+        return STATUS_NO_DIGITS; 
 
-        int digit = str[i] - '0';
-        digits++;
+    value += fraction; 
 
-        if (point == 0) {
-
-            if (value > (DBL_MAX - digit) / 10.0)   /*Поменять DBL_MAX*/
-                return STATUS_OVERFLOW;
-
-            value = value * 10.0 + digit;
-        }
-
-        else {
-
-            fraction += digit / divider;
-            divider *= 10.0;
-        }
-    }
-
-    if (digits == 0)
-        return STATUS_NO_DIGITS;
-
-    value += fraction;
-
-    if (sign == -1)
-        return STATUS_SIGNED_NUMBER;
-
-    *custom_eps = value;
-
-    return STATUS_OK;
+    if (str[i] == 'e' || str[i] == 'E'){ 
+        i++; 
+        int exponent_sign = 1; 
+        if (str[i] == '+' || str[i] == '-'){ 
+            if (str[i] == '-') 
+                exponent_sign = -1; 
+            i++; 
+        } 
+        if (str[i] == '\0') 
+            return STATUS_NO_DIGITS; 
+        
+        int exponent = 0; 
+        int exponent_digits = 0; 
+        while (str[i] != '\0'){ 
+            if (str[i] < '0' || str[i] > '9') 
+                return STATUS_INVALID_NUMBER; 
+            
+            int digit = str[i] - '0'; 
+            exponent_digits++;  
+            
+            if (exponent > (INT_MAX - digit) / 10) 
+                return STATUS_OVERFLOW; 
+                
+            exponent = exponent * 10 + digit; 
+            i++; 
+        } 
+        
+        if (exponent_digits == 0) 
+            return STATUS_NO_DIGITS; 
+        
+        exponent *= exponent_sign; 
+        double multiplier = pow(10.0, exponent); 
+        
+        if (!isfinite(multiplier)) 
+            return STATUS_OVERFLOW; 
+            
+        value *= multiplier; 
+        
+        if (!isfinite(value)) 
+            return STATUS_OVERFLOW; 
+    } 
+    
+    if (sign == -1) 
+        return STATUS_SIGNED_NUMBER; 
+    
+    *custom_eps = value; 
+    return STATUS_OK; 
 }
 
 void print_result(const char *name, Status status, double result){
