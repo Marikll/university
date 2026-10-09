@@ -198,8 +198,10 @@ Status conversion_num(const char *str, double *num, int flag_eps){
     int sign = 1; 
     
     if (str[i] == '-' || str[i] == '+'){ 
-        if (str[i] == '-') 
-            sign = -1; i++; 
+        if (str[i] == '-') {
+            sign = -1; 
+            i++; 
+        }
         if (str[i] == '\0') 
             return STATUS_NO_DIGITS; 
     } 
@@ -389,6 +391,10 @@ int main(int argc, char *argv[]){
                 printf("Ошибка: переполнение. Введите коэффициенты поменьше.\n");
                 return 1;
             }
+            if (st_a == STATUS_INVALID_NUMBER || st_b == STATUS_INVALID_NUMBER || st_c == STATUS_INVALID_NUMBER){
+                printf("Ошибка: введено недопустимое значение.\n");
+                return 1;
+            }
             if (st_a == STATUS_OK && st_b == STATUS_OK && st_c == STATUS_OK){
               
                 double results[12];
@@ -552,6 +558,10 @@ int main(int argc, char *argv[]){
                 printf("Ошибка: переполнение. Введите числа поменьше.\n");
                 return 1;
             }
+            if (st_x == STATUS_INVALID_NUMBER || st_y == STATUS_INVALID_NUMBER || st_z == STATUS_INVALID_NUMBER){
+                    printf("Неккоректное значение(nan, inf и т.п. не поддерживаются).\n");
+                    return 1;
+            }
             if (st_x == STATUS_OK && st_y == STATUS_OK && st_z == STATUS_OK){
 
                 Status st_t = flag_t(eps, &x, &y, &z);
@@ -571,7 +581,7 @@ int main(int argc, char *argv[]){
                 if (st_t == STATUS_OK){
                     printf("Стороны треугольника могут быть равны: %.5g, %.5g, %.5g.\n", x, y, z);
                     return 0;
-                }
+                } 
             }
         }
     }
