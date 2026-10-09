@@ -255,11 +255,9 @@ Status check_flag(const char * str){
     }
 }
 
-int extension_equal(const char *first, const char *second)
-{
+int extension_equal(const char *first, const char *second){
     while (*first != '\0' && *second != '\0') {
-        if (tolower((unsigned char)*first) !=
-            tolower((unsigned char)*second)) {
+        if (tolower((unsigned char)*first) != tolower((unsigned char)*second)) {
             return 0;
         }
 
@@ -270,8 +268,7 @@ int extension_equal(const char *first, const char *second)
     return *first == '\0' && *second == '\0';
 }
 
-Status check_file_extension(const char *path)
-{
+Status check_file_extension(const char *path){
     if (path == NULL)
         return STATUS_NULL_ARGUMENT;
 
