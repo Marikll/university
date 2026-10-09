@@ -18,7 +18,8 @@ typedef enum{
     STATUS_NO_DIGITS,
     STATUS_OVERFLOW,
     STATUS_INVALID_NUMBER,
-    STATUS_SIGNED_NUMBER
+    STATUS_SIGNED_NUMBER,
+    STATUS_TWO_ANSWER
 } Status;
 
 Status flag_q(const double eps, double *a, double *b, double *c, double res[], int *cur){
@@ -40,6 +41,7 @@ Status flag_q(const double eps, double *a, double *b, double *c, double res[], i
         {c1, b1, a1} 
     };
 
+    int two_answer = 0;
     int var_count = 0;
     *cur = 0;
     double add_var;
@@ -66,6 +68,7 @@ Status flag_q(const double eps, double *a, double *b, double *c, double res[], i
             res[*cur] = 0.0;
             (*cur)++; /* в случае, когда среди коэф. два нуля: решение только 0 или нет решений вовсе*/
         } else if (fabs(a1) <= eps && fabs(b1) <= eps){
+            two_answer++;
             continue;
         } else if (fabs(a1) <= eps){
             res[*cur] = (-c1/b1);
@@ -85,8 +88,10 @@ Status flag_q(const double eps, double *a, double *b, double *c, double res[], i
     }
     
 
-    if (*cur>0)
+    if (*cur>0 && !two_answer)
         return STATUS_OK;
+    else if (*cur>0)
+        return STATUS_TWO_ANSWER;
     else   
         return STATUS_NO_SOLUTION;
 }
@@ -407,6 +412,13 @@ int main(int argc, char *argv[]){
                     for (int i = 0; i < cur; i++)
                         printf("%.5g ", results[i]);
                     printf("\n");
+                }
+                if (st_q == STATUS_TWO_ANSWER){
+                    printf("Корни уравнения: ");
+                    for (int i = 0; i < cur; i++)
+                        printf("%.5g ", results[i]);
+                    printf("\n");
+                    printf("Уравнение вида: 0x^2 + 0x + c = 0, не имеет решений.\n");
                 }
                 break;
             }
