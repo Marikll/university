@@ -267,35 +267,35 @@ Status process_file(FILE *input, FILE *output) {
 void print_status_error(Status status) {
     switch (status) {
         case STATUS_NULL_ARGUMENT:
-            fprintf(stderr, "Ошибка: нулевой указатель.\n");
+            printf("Ошибка: нулевой указатель.\n");
             break;
 
         case STATUS_INVALID_ARGUMENTS:
-            fprintf(stderr, "Ошибка: неверное количество аргументов.\n");
+            printf("Ошибка: неверное количество аргументов.\n");
             break;
 
         case STATUS_INVALID_NUMBER:
-            fprintf(stderr, "Ошибка: некорректное число.\n");
+            printf("Ошибка: некорректное число.\n");
             break;
 
         case STATUS_OVERFLOW:
-            fprintf(stderr, "Ошибка: число слишком большое.\n");
+            printf("Ошибка: число слишком большое.\n");
             break;
 
         case STATUS_MEMORY_ERROR:
-            fprintf(stderr, "Ошибка: не удалось выделить память.\n");
+            printf("Ошибка: не удалось выделить память.\n");
             break;
 
         case STATUS_INPUT_ERROR:
-            fprintf(stderr, "Ошибка чтения входного файла.\n");
+            printf("Ошибка чтения входного файла.\n");
             break;
 
         case STATUS_OUTPUT_ERROR:
-            fprintf(stderr, "Ошибка записи выходного файла.\n");
+            printf("Ошибка записи выходного файла.\n");
             break;
 
         case STATUS_FILE_ERROR:
-            fprintf(stderr, "Ошибка открытия файла.\n");
+            printf("Ошибка открытия файла.\n");
             break;
 
         case STATUS_OK:
@@ -307,8 +307,7 @@ void print_status_error(Status status) {
 int extension_equal(const char *first, const char *second)
 {
     while (*first != '\0' && *second != '\0') {
-        if (tolower((unsigned char)*first) !=
-            tolower((unsigned char)*second)) {
+        if (tolower((unsigned char)*first) != tolower((unsigned char)*second)) {
             return 0;
         }
 
@@ -364,7 +363,7 @@ Status check_file_extension(const char *path)
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         print_status_error(STATUS_INVALID_ARGUMENTS);
-        fprintf(stderr, "Использование: %s input.txt output.txt\n", argv[0]);
+        printf("Пример допустимого ввода: %s input.txt output.txt\n", argv[0]);
         return 1;
     }
 
