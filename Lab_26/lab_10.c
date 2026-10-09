@@ -17,11 +17,8 @@ typedef enum {
     STATUS_NO_NUMBERS
 } Status;
 
-/*
- * Удаляет символ '\n', который может остаться после fgets.
- */
-Status remove_newline(char *str)
-{
+/* Удаляет символ '\n', который может остаться после fgets.*/
+Status remove_newline(char *str){
     if (str == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -37,12 +34,8 @@ Status remove_newline(char *str)
 }
 
 
-/*
- * Проверяет строковое представление основания
- * и переводит его в int.
- */
-Status parse_base(const char *str, int *base)
-{
+/* Проверяет строковое представление основания и переводит его в int.*/
+Status parse_base(const char *str, int *base){
     if (str == NULL || base == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -81,14 +74,8 @@ Status parse_base(const char *str, int *base)
 }
 
 
-/*
- * Переводит один символ в его числовое значение.
- *
- * 0..9 -> 0..9
- * A..Z -> 10..35
- */
-Status get_digit_value(char symbol, int *digit)
-{
+/* Переводит один символ в его числовое значение.*/
+Status get_digit_value(char symbol, int *digit){
     if (digit == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -106,20 +93,8 @@ Status get_digit_value(char symbol, int *digit)
 }
 
 
-/*
- * Переводит строковое число из системы base
- * в тип long long.
- *
- * Поддерживаются '+' и '-'.
- * Ввод цифр больше 9 разрешён только
- * прописными латинскими буквами.
- */
-Status convert_to_decimal(
-    const char *str,
-    int base,
-    long long *result
-)
-{
+/* Переводит строковое число из системы base в long long.*/
+Status convert_to_decimal(const char *str, int base, long long *result){
     if (str == NULL || result == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -135,19 +110,13 @@ Status convert_to_decimal(
     if (str[i] == '-') {
         negative = 1;
         i++;
-    }
-    else if (str[i] == '+') {
+    } else if (str[i] == '+') {
         i++;
     }
 
     if (str[i] == '\0')
         return STATUS_INVALID_NUMBER;
 
-    /*
-     * Храним модуль числа в unsigned long long.
-     * Это позволяет корректно обработать LLONG_MIN,
-     * поскольку его модуль на 1 больше LLONG_MAX.
-     */
     unsigned long long value = 0;
 
     while (str[i] != '\0') {
@@ -161,28 +130,14 @@ Status convert_to_decimal(
         if (digit >= base)
             return STATUS_INVALID_NUMBER;
 
-        /*
-         * Проверяем переполнение перед:
-         *
-         * value = value * base + digit
-         */
-        if (value > (ULLONG_MAX - (unsigned long long)digit)
-                    / (unsigned long long)base)
+        if (value > (ULLONG_MAX - (unsigned long long)digit)/ (unsigned long long)base)
             return STATUS_OVERFLOW;
 
-        value = value * (unsigned long long)base
-              + (unsigned long long)digit;
-
+        value = value * (unsigned long long)base + (unsigned long long)digit;
         i++;
     }
 
-    /*
-     * Для положительного числа максимум:
-     * LLONG_MAX.
-     *
-     * Для отрицательного:
-     * -(LLONG_MAX + 1) = LLONG_MIN.
-     */
+    /* Для положительного числа максимум: LLONG_MAX. Для отрицательного: -(LLONG_MAX + 1) = LLONG_MIN.*/
     if (!negative) {
 
         if (value > (unsigned long long)LLONG_MAX)
@@ -205,15 +160,7 @@ Status convert_to_decimal(
 }
 
 
-/*
- * Безопасно складывает два long long.
- */
-Status add_numbers(
-    long long first,
-    long long second,
-    long long *result
-)
-{
+Status add_numbers(long long first, long long second, long long *result){
     if (result == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -229,17 +176,8 @@ Status add_numbers(
 }
 
 
-/*
- * Возвращает модуль числа в unsigned long long.
- *
- * Это нужно, потому что для LLONG_MIN обычный
- * abs() использовать нельзя.
- */
-Status absolute_value(
-    long long number,
-    unsigned long long *result
-)
-{
+/* Возвращает модуль числа в unsigned long long.*/
+Status absolute_value(long long number, unsigned long long *result){
     if (result == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -247,13 +185,6 @@ Status absolute_value(
         *result = (unsigned long long)number;
     }
     else {
-        /*
-         * Для LLONG_MIN:
-         *
-         * -(LLONG_MIN + 1) + 1
-         *
-         * вычисляется без переполнения.
-         */
         *result = (unsigned long long)(-(number + 1)) + 1ULL;
     }
 
@@ -261,20 +192,8 @@ Status absolute_value(
 }
 
 
-/*
- * Проверяет, является ли candidate большим по модулю,
- * чем current_max.
- *
- * Возвращает:
- * 1 - candidate больше по модулю
- * 0 - иначе
- */
-Status is_greater_by_abs(
-    long long candidate,
-    long long current_max,
-    int *result
-)
-{
+/* Проверяет, является ли candidate большим по модулю, чем current_max.*/
+Status is_greater_by_abs(long long candidate, long long current_max, int *result){
     if (result == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -297,19 +216,8 @@ Status is_greater_by_abs(
 }
 
 
-/*
- * Переводит число из десятичной системы
- * в систему с основанием base.
- *
- * Результат записывается в output.
- */
-Status convert_from_decimal(
-    long long number,
-    int base,
-    char *output,
-    size_t output_size
-)
-{
+/* Переводит число из десятичной системы в систему с основанием base. Результат записывается в output.*/
+Status convert_from_decimal(long long number, int base, char *output, size_t output_size){
     if (output == NULL)
         return STATUS_NULL_ARGUMENT;
 
@@ -332,9 +240,6 @@ Status convert_from_decimal(
     char reversed[MAX_OUTPUT_LENGTH];
     size_t length = 0;
 
-    /*
-     * Ноль обрабатывается отдельно.
-     */
     if (value == 0) {
         if (output_size < 2)
             return STATUS_OVERFLOW;
@@ -345,47 +250,35 @@ Status convert_from_decimal(
         return STATUS_OK;
     }
 
-    while (value > 0) {
+    size_t digits_count = 0;
 
-        if (length >= sizeof(reversed))
+    while (value > 0) {
+        if (digits_count >= sizeof(reversed))
             return STATUS_OVERFLOW;
 
-        reversed[length++] = digits[value % (unsigned long long)base];
-
+        reversed[digits_count++] = digits[value % (unsigned long long)base];
         value /= (unsigned long long)base;
     }
 
-    if (negative)
-        length++;
+    size_t total = digits_count + (negative ? 1 : 0) + 1; /* знак + '\0' */
 
-    if (length + 1 > output_size)
+    if (total > output_size)
         return STATUS_OVERFLOW;
 
     size_t position = 0;
 
-    if (negative) {
+    if (negative)
         output[position++] = '-';
-    }
 
-    while (length > (size_t)(negative ? 1 : 0)) {
-
-        length--;
-        output[position++] = reversed[length];
-    }
+    while (digits_count > 0)
+        output[position++] = reversed[--digits_count];
 
     output[position] = '\0';
 
     return STATUS_OK;
 }
 
-
-/*
- * Выводит сообщение об ошибке.
- *
- * Функция занимается только выводом.
- */
-void print_error(Status status)
-{
+void print_error(Status status){
     switch (status) {
 
         case STATUS_NULL_ARGUMENT:
@@ -457,13 +350,6 @@ int main(void){
         return 1;
     }
 
-
-    /*
-     * ==========================
-     * ВВОД ЧИСЕЛ
-     * ==========================
-     */
-
     printf("Введите числа в системе счисления %d.\n", base);
     printf("Для завершения введите Stop.\n");
 
@@ -483,18 +369,8 @@ int main(void){
             return 1;
         }
 
-        /*
-         * Stop завершает ввод.
-         */
         if (strcmp(input, "Stop") == 0)
             break;
-
-
-        /*
-         * ==========================
-         * ОБРАБОТКА ЧИСЛА
-         * ==========================
-         */
 
         long long number;
 
@@ -505,11 +381,6 @@ int main(void){
             return 1;
         }
 
-
-        /*
-         * Первое число становится
-         * текущим максимумом.
-         */
         if (number_count == 0) {
             max_number = number;
             sum = number;
@@ -517,18 +388,9 @@ int main(void){
             continue;
         }
 
-
-        /*
-         * Проверяем новый максимум
-         * по модулю.
-         */
         int greater;
 
-        status = is_greater_by_abs(
-            number,
-            max_number,
-            &greater
-        );
+        status = is_greater_by_abs(number, max_number, &greater);
 
         if (status != STATUS_OK) {
             print_error(status);
@@ -538,17 +400,9 @@ int main(void){
         if (greater)
             max_number = number;
 
-
-        /*
-         * Добавляем число к сумме.
-         */
         long long new_sum;
 
-        status = add_numbers(
-            sum,
-            number,
-            &new_sum
-        );
+        status = add_numbers(sum, number, &new_sum);
 
         if (status != STATUS_OK) {
             print_error(status);
@@ -560,24 +414,10 @@ int main(void){
         number_count++;
     }
 
-
-    /*
-     * ==========================
-     * ПРОВЕРКА НАЛИЧИЯ ЧИСЕЛ
-     * ==========================
-     */
-
     if (number_count == 0) {
         print_error(STATUS_NO_NUMBERS);
         return 1;
     }
-
-
-    /*
-     * ==========================
-     * ПОДГОТОВКА РЕЗУЛЬТАТОВ
-     * ==========================
-     */
 
     char max_base9[MAX_OUTPUT_LENGTH];
     char max_base18[MAX_OUTPUT_LENGTH];
@@ -590,48 +430,28 @@ int main(void){
     char sum_base36[MAX_OUTPUT_LENGTH];
 
 
-    status = convert_from_decimal(
-        max_number,
-        9,
-        max_base9,
-        sizeof(max_base9)
-    );
+    status = convert_from_decimal(max_number, 9, max_base9, sizeof(max_base9));
 
     if (status != STATUS_OK) {
         print_error(status);
         return 1;
     }
 
-    status = convert_from_decimal(
-        max_number,
-        18,
-        max_base18,
-        sizeof(max_base18)
-    );
+    status = convert_from_decimal(max_number, 18, max_base18, sizeof(max_base18));
 
     if (status != STATUS_OK) {
         print_error(status);
         return 1;
     }
 
-    status = convert_from_decimal(
-        max_number,
-        27,
-        max_base27,
-        sizeof(max_base27)
-    );
+    status = convert_from_decimal(max_number, 27, max_base27, sizeof(max_base27));
 
     if (status != STATUS_OK) {
         print_error(status);
         return 1;
     }
 
-    status = convert_from_decimal(
-        max_number,
-        36,
-        max_base36,
-        sizeof(max_base36)
-    );
+    status = convert_from_decimal(max_number, 36, max_base36, sizeof(max_base36));
 
     if (status != STATUS_OK) {
         print_error(status);
@@ -639,60 +459,33 @@ int main(void){
     }
 
 
-    status = convert_from_decimal(
-        sum,
-        9,
-        sum_base9,
-        sizeof(sum_base9)
-    );
+    status = convert_from_decimal(sum, 9, sum_base9, sizeof(sum_base9));
 
     if (status != STATUS_OK) {
         print_error(status);
         return 1;
     }
 
-    status = convert_from_decimal(
-        sum,
-        18,
-        sum_base18,
-        sizeof(sum_base18)
-    );
+    status = convert_from_decimal(sum, 18, sum_base18, sizeof(sum_base18));
 
     if (status != STATUS_OK) {
         print_error(status);
         return 1;
     }
 
-    status = convert_from_decimal(
-        sum,
-        27,
-        sum_base27,
-        sizeof(sum_base27)
-    );
+    status = convert_from_decimal(sum, 27, sum_base27, sizeof(sum_base27));
 
     if (status != STATUS_OK) {
         print_error(status);
         return 1;
     }
 
-    status = convert_from_decimal(
-        sum,
-        36,
-        sum_base36,
-        sizeof(sum_base36)
-    );
+    status = convert_from_decimal(sum, 36, sum_base36, sizeof(sum_base36));
 
     if (status != STATUS_OK) {
         print_error(status);
         return 1;
     }
-
-
-    /*
-     * ==========================
-     * ВЫВОД
-     * ==========================
-     */
 
     printf("\nМаксимальное по модулю число:\n");
     printf("10: %lld\n", max_number);
