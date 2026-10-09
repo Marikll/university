@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 typedef enum {
     STATUS_OK,
@@ -84,12 +85,15 @@ Status flag_s(FILE * input, FILE * output){
             if(fprintf( output, "%d\n", count) < 0)
                 return STATUS_OUTPUT_ERROR;
             count = 0;
-        } else { 
-            if ((symbol < 'A' || symbol > 'Z') && (symbol < 'a' || symbol > 'z') && (symbol < '0' || symbol > '9') && symbol != ' ')
-                count++;
+            continue;
         }
+        
+        if ((symbol & 0xC0) == 0x80)
+            continue;
+        
+        if ((symbol < 'A' || symbol > 'Z') && (symbol < 'a' || symbol > 'z') && (symbol < '0' || symbol > '9') && symbol != ' ')
+            count++;
     }
-
     if (ferror(input))
         return STATUS_INPUT_ERROR;
 
@@ -260,6 +264,59 @@ void print_status_error(Status status) {
     }
 }
 
+int extension_equal(const char *first, const char *second){
+    while (*first != '\0' && *second != '\0') {
+        if (tolower((unsigned char)*first) != tolower((unsigned char)*second)) {
+            return 0;
+        }
+
+        first++;
+        second++;
+    }
+
+    return *first == '\0' && *second == '\0';
+}
+
+Status check_file_extension(const char *path){
+    if (path == NULL)
+        return STATUS_NULL_ARGUMENT;
+
+    if (path[0] == '\0')
+        return STATUS_EMPTY_STRING;
+
+    const char *name = path;
+
+    for (const char *p = path; *p != '\0'; p++) {
+        if (*p == '/' || *p == '\\')
+            name = p + 1;
+    }
+
+    const char *dot = strrchr(name, '.');
+
+    if (dot == NULL)
+        return STATUS_OK;
+
+    const char *forbidden[] = {
+        ".png", ".jpg", ".jpeg", ".gif",
+        ".bmp", ".webp", ".tif", ".tiff",
+        ".ico", ".pdf",
+        ".zip", ".rar", ".7z", ".gz", ".tar",
+        ".exe", ".dll", ".so",
+        ".mp3", ".wav", ".flac",
+        ".mp4", ".avi", ".mkv", ".mov",
+        ".docx", ".xlsx", ".pptx",
+        ".odt", ".ods", ".odp"
+    };
+
+    int count = sizeof(forbidden) / sizeof(forbidden[0]);
+
+    for (int i = 0; i < count; i++) {
+        if (extension_equal(dot, forbidden[i]))
+            return STATUS_INVALID_ARGUMENTS;
+    }
+
+    return STATUS_OK;
+}
 
 int main(int argc, char *argv[]){
     if (argc < 2 || argc > 4){
@@ -267,7 +324,6 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
-    /*прописать функцию для проверки флага, проверить статус, а после смотреть на путь/пути к файлу/файлам.*/
     Status st_flag = check_flag(argv[1]);
 
     if (st_flag == STATUS_NULL_ARGUMENT || st_flag == STATUS_INVALID_FLAG || st_flag == STATUS_EMPTY_STRING){
@@ -304,6 +360,11 @@ int main(int argc, char *argv[]){
             printf("Ошибка: входной и выходной файлы совпадают.\n");
             free(generated_output);
             return 1;
+    }
+
+    if (check_file_extension(input_path) != STATUS_OK || check_file_extension(output_path) != STATUS_OK){
+        printf("Ошибка: запрещённое расширение файла.\n");
+        return 1;
     }
 
     FILE* input = fopen(argv[2], "r");
@@ -348,7 +409,7 @@ int main(int argc, char *argv[]){
             break;
     }
 
-     int input_close_result = fclose(input);
+    int input_close_result = fclose(input);
     int output_close_result = fclose(output);
 
     if (operation_status != STATUS_OK) {
