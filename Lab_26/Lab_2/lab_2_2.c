@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <float.h>
 #include <math.h>
+#include <sys/stat.h>
 
 #define SALARY_EPS 1e-9
 
@@ -29,7 +30,8 @@ typedef enum {
     STATUS_INVALID_ID,
     STATUS_INVALID_NAME,
     STATUS_INVALID_SALARY,
-    STATUS_OVERFLOW
+    STATUS_OVERFLOW,
+    STATUS_SAME_FILE
 } Status;
 
 void print_error(Status status){
@@ -391,6 +393,19 @@ Status check_flag(const char *str){
     }
 }
 
+int same_files(const char *path1, const char *path2)
+{
+    struct stat s1, s2;
+
+    if (path1 == NULL || path2 == NULL)
+        return 0;
+
+    if (stat(path1, &s1) != 0 || stat(path2, &s2) != 0)
+        return 0;
+
+    return s1.st_dev == s2.st_dev && s1.st_ino == s2.st_ino;
+}
+
 int extension_equal(const char *first, const char *second){
     while (*first != '\0' && *second != '\0') {
         if (tolower((unsigned char)*first) != tolower((unsigned char)*second)) {
@@ -458,7 +473,7 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
-    if (strcmp(argv[1], argv[3]) == 0) {
+    if (same_files(argv[1], argv[3])) {
         printf("Ошибка: входной и выходной файлы совпадают.\n");
         return 1;
     }
