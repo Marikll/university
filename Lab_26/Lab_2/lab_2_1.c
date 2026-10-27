@@ -101,14 +101,8 @@ Status flag_n(const char *str, char **result){
     return STATUS_OK;
 }
 
-/*
- * first        - вторая переданная строка (argv[2])
- * others       - строки начиная с argv[4]
- * others_count - их количество
- */
-Status flag_c(const char *first, unsigned int seed,
-              char *const *others, size_t others_count,
-              char **result)
+/*first - вторая переданная строка (argv[2]), others - строки начиная с argv[4], others_count - их количество*/
+Status flag_c(const char *first, unsigned int seed, char *const *others, size_t others_count, char **result)
 {
     if (first == NULL || result == NULL || (others == NULL && others_count > 0))
         return STATUS_NULL_ARGUMENT;
