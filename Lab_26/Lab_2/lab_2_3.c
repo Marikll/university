@@ -20,7 +20,6 @@ static size_t string_length(const char *str){
     return n;
 }
 
-/* освобождает массив найденных строк */
 static void free_results(char **res, size_t count){
     for (size_t i = 0; i < count; i++)
         free(res[i]);
@@ -49,7 +48,6 @@ Status prefix_function(const char *s, size_t n, size_t *pi) {
     return STATUS_OK;
 }
 
-/* Ищет вхождения, результаты возвращает массивом строк в *str_res, их число в *count */
 Status kmp_search(const char *text, size_t len_text, FILE *file, const size_t *pi, char ***str_res, size_t *count) {
     if (text == NULL || file == NULL || pi == NULL || str_res == NULL || count == NULL)
         return STATUS_NULL_ARGUMENT;
@@ -75,9 +73,6 @@ Status kmp_search(const char *text, size_t len_text, FILE *file, const size_t *p
     }
 
     while ((symbol = fgetc(file)) != EOF){
-        if ((symbol & 0xC0) == 0x80)
-            continue;
-        
         lines[pos % len_text] = line;
         columns[pos % len_text] = column;
 
@@ -123,7 +118,7 @@ Status kmp_search(const char *text, size_t len_text, FILE *file, const size_t *p
         if (symbol == '\n'){
             line++;
             column = 1;
-        } else {
+        } else if ((symbol & 0xC0) == 0x80){
             column++;
         }
         pos++;
