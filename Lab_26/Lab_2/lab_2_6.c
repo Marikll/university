@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <string.h>
+#define TOKEN_START_CAP 16
 
 typedef enum{
     STATUS_OK,
@@ -59,24 +60,59 @@ int accept_char(int c, int mode){
     return c >= 'A' && c <= 'Z';
 }
 
-size_t read_token(Source *s, int mode, int allow_sign, char *buf, size_t size){
-    size_t len = 0;
+
+Status token_push(char **buf, size_t *len, size_t *cap, char c){
+    if (buf == NULL || *buf == NULL || len == NULL || cap == NULL)
+        return STATUS_NULL_ARGUMENT;
+
+    if (*len + 1 >= *cap){
+        if (*cap > (size_t)-1 / 2 / sizeof(**buf))
+            return STATUS_MEMORY_ERROR;
+        char *tmp = realloc(*buf, *cap * 2 * sizeof(**buf));
+        if (tmp == NULL)
+            return STATUS_MEMORY_ERROR;
+        *buf = tmp;
+        *cap *= 2;
+    }
+    (*buf)[(*len)++] = c;
+    (*buf)[*len] = '\0';
+    return STATUS_OK;
+}
+
+Status read_token(Source *s, int mode, int allow_sign, char **token, size_t *len){
+    if (s == NULL || token == NULL || len == NULL)
+        return STATUS_NULL_ARGUMENT;
+
+    size_t cap = TOKEN_START_CAP;
+    *len = 0;
+    *token = malloc(cap * sizeof(**token));
+    if (*token == NULL)
+        return STATUS_MEMORY_ERROR;
+    (*token)[0] = '\0';
+
+    Status st = STATUS_OK;
 
     skip_spaces(s);
     int c = src_get(s);
 
     if (allow_sign && (c == '-' || c == '+')){
-        buf[len++] = (char)c;
+        st = token_push(token, len, &cap, (char)c);
         c = src_get(s);
     }
-    while (c != EOF && accept_char(c, mode) && len + 1 < size){
-        buf[len++] = (char)c;
-        c = src_get(s);
+    while (st == STATUS_OK && c != EOF && accept_char(c, mode)){
+        st = token_push(token, len, &cap, (char)c);
+        if (st == STATUS_OK)
+            c = src_get(s);
     }
-    src_unget(s, c);               
 
-    buf[len] = '\0';
-    return len;
+    if (st != STATUS_OK){
+        free(*token);
+        *token = NULL;
+        return st;
+    }
+
+    src_unget(s, c);
+    return STATUS_OK;
 }
 
 int roman_digit(char c){
@@ -96,11 +132,18 @@ Status flag_Ro(Source *s, int *res){
     if (s == NULL || res == NULL)
         return STATUS_NULL_ARGUMENT;
 
-    char buf[32];
-    if (read_token(s, 0, 0, buf, sizeof(buf)) == 0)
-        return STATUS_INVALID_NUMBER;
+    char *buf = NULL;
+    size_t len = 0;
+    Status st = read_token(s, 0, 0, &buf, &len);
+    if (st != STATUS_OK)
+        return st;
 
-    long long total = 0;                       
+    if (len == 0){
+        free(buf);
+        return STATUS_INVALID_NUMBER;
+    }
+
+    long long total = 0;
     for (size_t i = 0; buf[i] != '\0'; i++){
         int cur = roman_digit(buf[i]);
         int next = roman_digit(buf[i + 1]);
@@ -109,53 +152,73 @@ Status flag_Ro(Source *s, int *res){
         else
             total += cur;
 
-        if (total > INT_MAX || total < INT_MIN)
-            return STATUS_OVERFLOW;
+        if (total > INT_MAX || total < INT_MIN){
+            st = STATUS_OVERFLOW;
+            break;
+        }
     }
 
-    *res = (int)total;
-    return STATUS_OK;
+    if (st == STATUS_OK)
+        *res = (int)total;
+
+    free(buf);
+    return st;
 }
 
 Status flag_Zr(Source *s, unsigned int *res){
     if (s == NULL || res == NULL)
         return STATUS_NULL_ARGUMENT;
 
-    char buf[64];
+    size_t cap = TOKEN_START_CAP;
     size_t len = 0;
+    char *buf = malloc(cap * sizeof(*buf));
+    if (buf == NULL)
+        return STATUS_MEMORY_ERROR;
+    buf[0] = '\0';
+
+    Status st = STATUS_OK;
     char prev = 0;
     int c;
 
     skip_spaces(s);
-    while (len + 1 < sizeof(buf) && (c = src_get(s)) != EOF){
+    while ((c = src_get(s)) != EOF){
         if (c != '0' && c != '1'){
             src_unget(s, c);
             break;
         }
-        buf[len++] = (char)c;
+        st = token_push(&buf, &len, &cap, (char)c);
+        if (st != STATUS_OK)
+            break;
         if (c == '1' && prev == '1')
             break;
         prev = (char)c;
     }
 
-    if (len < 2)
-        return STATUS_INVALID_NUMBER;
+    if (st == STATUS_OK && len < 2)
+        st = STATUS_INVALID_NUMBER;
 
-    unsigned long long result = 0;             
+    unsigned long long result = 0;
     unsigned long long a = 1, b = 2;
-    for (size_t i = 0; i + 1 < len; i++){
+    for (size_t i = 0; st == STATUS_OK && i + 1 < len; i++){
         if (buf[i] == '1'){
-            if (a > UINT_MAX - result)         
-                return STATUS_OVERFLOW;
+            if (a > UINT_MAX - result){
+                st = STATUS_OVERFLOW;
+                break;
+            }
             result += a;
         }
-        unsigned long long t = a + b;
-        a = b;
-        b = t;
+        if (a <= UINT_MAX){               
+            unsigned long long t = a + b;
+            a = b;
+            b = t;
+        }
     }
 
-    *res = (unsigned int)result;
-    return STATUS_OK;
+    if (st == STATUS_OK)
+        *res = (unsigned int)result;
+
+    free(buf);
+    return st;
 }
 
 Status flag_Cv(Source *s, int *res, int base, int upper){
@@ -165,9 +228,11 @@ Status flag_Cv(Source *s, int *res, int base, int upper){
     if (base < 2 || base > 36)
         base = 10;
 
-    char buf[64];
-    if (read_token(s, upper ? 2 : 1, 1, buf, sizeof(buf)) == 0)
-        return STATUS_INVALID_NUMBER;
+    char *buf = NULL;
+    size_t len = 0;
+    Status st = read_token(s, upper ? 2 : 1, 1, &buf, &len);
+    if (st != STATUS_OK)
+        return st;
 
     size_t i = 0;
     int negative = 0;
@@ -176,6 +241,11 @@ Status flag_Cv(Source *s, int *res, int base, int upper){
         i++;
     } else if (buf[0] == '+'){
         i++;
+    }
+
+    if (buf[i] == '\0'){                    
+        free(buf);
+        return STATUS_INVALID_NUMBER;
     }
 
     unsigned long long limit = negative ? (unsigned long long)INT_MAX + 1ULL : (unsigned long long)INT_MAX;
@@ -189,38 +259,44 @@ Status flag_Cv(Source *s, int *res, int base, int upper){
         else
             digit = buf[i] - 'A' + 10;
 
-        if (value > (limit - (unsigned long long)digit) / (unsigned long long)base)
-            return STATUS_OVERFLOW;      
-
-        if (digit >= base)
-            return STATUS_INVALID_NUMBER;
-
+        if (digit >= base){
+            st = STATUS_INVALID_NUMBER;
+            break;
+        }
+        if (value > (limit - (unsigned long long)digit) / (unsigned long long)base){
+            st = STATUS_OVERFLOW;
+            break;
+        }
         value = value * (unsigned long long)base + (unsigned long long)digit;
     }
 
-    if (negative)
-        *res = (int)(-(long long)value);
-    else
-        *res = (int)value;
-    return STATUS_OK;
+    if (st == STATUS_OK)
+        *res = negative ? (int)(-(long long)value) : (int)value;
+
+    free(buf);
+    return st;
 }
 
 Status std_scan(Source *s, const char *spec, void *ptr){
-    char spec2[40];
+    size_t n = strlen(spec);
+    char *spec2 = malloc((n + 3) * sizeof(*spec2));
+    if (spec2 == NULL)
+        return STATUS_MEMORY_ERROR;
+
     size_t k = 0;
     for (; spec[k] != '\0'; k++)
         spec2[k] = spec[k];
-    spec2[k++] = '%';                      // %n: сколько символов прочитано
+    spec2[k++] = '%';                   
     spec2[k++] = 'n';
     spec2[k] = '\0';
 
-    int used = -1;                        
+    int used = -1;                       
 
     if (s->file != NULL){
         if (ptr != NULL)
             fscanf(s->file, spec2, ptr, &used);
         else
-            fscanf(s->file, spec2, &used);  
+            fscanf(s->file, spec2, &used);
     } else {
         if (ptr != NULL)
             sscanf(s->str + s->pos, spec2, ptr, &used);
@@ -230,6 +306,7 @@ Status std_scan(Source *s, const char *spec, void *ptr){
             s->pos += (size_t)used;
     }
 
+    free(spec2);
     return (used >= 0) ? STATUS_OK : STATUS_INVALID_NUMBER;
 }
 
@@ -303,15 +380,19 @@ Status scan_core(Source *s, const char *format, va_list *values){
             }
             st = STATUS_OK;
             i = j + 1;
-        } else {
-            const char *allowed = "0123456789hlL";
-            char spec[32];
-            size_t len = 0;
+                } else {
+            const char *allowed = "0123456789hlLm";     
 
+            size_t spec_cap = strlen(format + j) + 4;   
+            char *spec = malloc(spec_cap * sizeof(*spec));
+            if (spec == NULL)
+                return STATUS_MEMORY_ERROR;
+
+            size_t len = 0;
             spec[len++] = '%';
             if (suppress)
-                spec[len++] = '*';            
-            while (format[j] != '\0' && len < 28){
+                spec[len++] = '*';
+            while (format[j] != '\0'){
                 int ok = 0;
                 for (size_t k = 0; allowed[k] != '\0'; k++)
                     if (format[j] == allowed[k])
@@ -327,8 +408,10 @@ Status scan_core(Source *s, const char *format, va_list *values){
             for (size_t k = 0; convs[k] != '\0'; k++)
                 if (conv == convs[k])
                     known = 1;
-            if (!known)
+            if (!known){
+                free(spec);
                 return STATUS_INVALID_FORMAT;
+            }
 
             spec[len++] = conv;
             spec[len] = '\0';
@@ -337,6 +420,7 @@ Status scan_core(Source *s, const char *format, va_list *values){
             if (!suppress)
                 p = va_arg(*values, void *);
             st = std_scan(s, spec, p);
+            free(spec);
             i = j + 1;
         }
 
@@ -372,61 +456,6 @@ Status oversscanf(const char *str, const char *format, ...){
     return st;
 }
 
-int extension_equal(const char *first, const char *second){
-    while (*first != '\0' && *second != '\0') {
-        if (tolower((unsigned char)*first) != tolower((unsigned char)*second)) {
-            return 0;
-        }
-
-        first++;
-        second++;
-    }
-
-    return *first == '\0' && *second == '\0';
-}
-
-Status check_file_extension(const char *path){
-    if (path == NULL)
-        return STATUS_NULL_ARGUMENT;
-
-    if (path[0] == '\0')
-        return STATUS_EMPTY_STRING;
-
-    const char *name = path;
-
-    for (const char *p = path; *p != '\0'; p++) {
-        if (*p == '/' || *p == '\\')
-            name = p + 1;
-    }
-
-    const char *dot = strrchr(name, '.');
-
-    if (dot == NULL)
-        return STATUS_OK;
-
-    const char *forbidden[] = {
-        ".png", ".jpg", ".jpeg", ".gif",
-        ".bmp", ".webp", ".tif", ".tiff",
-        ".ico", ".pdf",
-        ".zip", ".rar", ".7z", ".gz", ".tar",
-        ".exe", ".dll", ".so",
-        ".mp3", ".wav", ".flac",
-        ".mp4", ".avi", ".mkv", ".mov",
-        ".docx", ".xlsx", ".pptx",
-        ".odt", ".ods", ".odp"
-    };
-
-    int count = sizeof(forbidden) / sizeof(forbidden[0]);
-
-    for (int i = 0; i < count; i++) {
-        if (extension_equal(dot, forbidden[i]))
-            return STATUS_INVALID_ARGUMENTS;
-    }
-
-    return STATUS_OK;
-}
-
-
 const char *get_status_message(Status st) {
     switch (st) {
         case STATUS_OK:
@@ -456,38 +485,68 @@ const char *get_status_message(Status st) {
         case STATUS_MISMATCH:
             return "Ошибка: входные данные не соответствуют формату.";
 
+        case STATUS_EMPTY_STRING:
+            return "Передана пустая строка.";
+        
+        case STATUS_INVALID_ARGUMENTS:
+            return "Ошибка: переданы некорректные аргументы.";
+
         default:
             return "Неизвестная ошибка.";
     }
 }
 
+void print_status_error(Status st){
+    printf("%s\n", get_status_message(st));
+}
+
 int main(void){
-    int roman, num, plain;
-    unsigned int zeck;
-    double real;
+    int roman = 0, num = 0, plain = 0;
+    unsigned int zeck = 0;
+    double real = 0.0;
+    char *word = NULL;
+    Status st;
 
-    /* из строки */
-    Status st = oversscanf("MCMXCIV 1011 ff 255 3.5", "%Ro %Zr %Cv %d %lf", &roman, &zeck, &num, 16, &plain, &real);
-    if (st == STATUS_OK)
-        printf("Ro=%d Zr=%u Cv=%d d=%d f=%.1f\n", roman, zeck, num, plain, real);
-    else
-        printf("Ошибка, код %d\n", st);
+    // st = oversscanf("MCMXCIV 1011 ff 255 3.5 hello", "%Ro %Zr %Cv %d %lf %ms", &roman, &zeck, &num, 16, &plain, &real, &word);
+    st = oversscanf("1111111111 1 1", "%ms  %d", &word, &num);
+    if (st != STATUS_OK){
+        print_status_error(st);
+        return 1;
+    }
+    printf("ms=%s d=%d\n", word, num);
+    // printf("Ro=%d Zr=%u Cv=%d d=%d f=%.1f ms=%s\n", roman, zeck, num, plain, real, word);
+    free(word);
+    word = NULL;
 
-    /* из файла */
     FILE *f = tmpfile();
     if (f == NULL){
         printf("Не удалось создать файл.\n");
         return 1;
     }
-    fputs("XIV 100011 -FF 42", f);
+    fputs("XIV 100011 -FF 42 world", f);
     rewind(f);
 
-    st = overfscanf(f, "%Ro %Zr %CV %d", &roman, &zeck, &num, 16, &plain);
-    if (st == STATUS_OK)
-        printf("Ro=%d Zr=%u CV=%d d=%d\n", roman, zeck, num, plain);
-    else
-        printf("Ошибка, код %d\n", st);
-
+    st = overfscanf(f, "%Ro %Zr %CV %d %ms", &roman, &zeck, &num, 16, &plain, &word);
     fclose(f);
+    if (st != STATUS_OK){
+        print_status_error(st);
+        return 1;
+    }
+    printf("Ro=%d Zr=%u CV=%d d=%d ms=%s\n", roman, zeck, num, plain, word);
+    free(word);
+    word = NULL;
+
+    st = oversscanf("ffffffff", "%Cv", &num, 16);
+    if (st != STATUS_OK)
+        print_status_error(st);
+
+    st = oversscanf("abc", "%Ro", &roman);
+    if (st != STATUS_OK)
+        print_status_error(st);
+
+    st = oversscanf("5", "%y", &plain);
+    if (st != STATUS_OK)
+        print_status_error(st);
+
     return 0;
 }
