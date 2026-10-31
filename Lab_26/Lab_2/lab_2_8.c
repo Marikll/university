@@ -60,7 +60,7 @@ Status add_columns(const char *a, const char *b, int base, char **result){
     if (base < 2 || base > 36)
         return STATUS_INVALID_BASE;
 
-    char digits[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const char digits[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     size_t len_a = string_length(a);
     size_t len_b = string_length(b);
@@ -69,7 +69,7 @@ Status add_columns(const char *a, const char *b, int base, char **result){
     if (max > (size_t)-1 - 2)
         return STATUS_OVERFLOW;
 
-    char *reversed = malloc(max + 2);      
+    char *reversed = malloc((max + 2) * sizeof(*reversed));     
     if (reversed == NULL)
         return STATUS_MEMORY_ERROR;
 
@@ -106,7 +106,7 @@ Status add_columns(const char *a, const char *b, int base, char **result){
     while (pos > 1 && reversed[pos - 1] == '0')
         pos--;
 
-    char *out = malloc(pos + 1);
+    char *out = malloc((pos + 1) * sizeof(*out));
     if (out == NULL){
         free(reversed);
         return STATUS_MEMORY_ERROR;
@@ -126,7 +126,7 @@ Status sum_numbers(int base, size_t count, char **result, ...){
     if (base < 2 || base > 36)
         return STATUS_INVALID_BASE;
 
-    char *sum = malloc(2);
+    char *sum = malloc(2 * sizeof(*sum));
     if (sum == NULL)
         return STATUS_MEMORY_ERROR;
     sum[0] = '0';
@@ -193,7 +193,7 @@ int main(void){
     if (st == STATUS_OK){ printf("base 2: %s\n", res); free(res); }    // 10001
     else print_status_error(st);
 
-    st = sum_numbers(10, 2, &res, "12", "1A");                         // ошибка: A не цифра в base 10
+    st = sum_numbers(36, 2, &res, "12", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");                         // ошибка: A не цифра в base 10
     if (st == STATUS_OK){ printf("%s\n", res); free(res); }
     else print_status_error(st);
 
