@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <ctype.h>
 
 typedef struct{
     char * name_file;
@@ -187,28 +188,89 @@ void print_status_error(Status status) {
     }
 }
 
+Status read_word(FILE *stream, char **word, int *found){
+    if (stream == NULL || word == NULL || found == NULL)
+        return STATUS_NULL_ARGUMENT;
+
+    *word = NULL;
+    *found = 0;
+
+    int c;
+    do {
+        c = fgetc(stream);
+    } while (c != EOF && isspace((unsigned char)c));
+
+    if (c == EOF)
+        return ferror(stream) ? STATUS_INPUT_ERROR : STATUS_OK;
+
+    size_t capacity = 16;
+    size_t length = 0;
+    char *buffer = malloc(capacity);
+    if (buffer == NULL)
+        return STATUS_MEMORY_ERROR;
+
+    while (c != EOF && !isspace((unsigned char)c)){
+        if (length + 1 >= capacity){
+            if (capacity > (size_t)-1 / 2){
+                free(buffer);
+                return STATUS_MEMORY_ERROR;
+            }
+            char *tmp = realloc(buffer, capacity * 2);
+            if (tmp == NULL){
+                free(buffer);
+                return STATUS_MEMORY_ERROR;
+            }
+            buffer = tmp;
+            capacity *= 2;
+        }
+        buffer[length++] = (char)c;
+        c = fgetc(stream);
+    }
+
+    if (c == EOF && ferror(stream)){
+        free(buffer);
+        return STATUS_INPUT_ERROR;
+    }
+
+    buffer[length] = '\0';
+    *word = buffer;
+    *found = 1;
+    return STATUS_OK;
+}
+
 int main(void){
-    char buf1[100], buf2[100], buf3[100];
     Status st;
+    char *w1 = NULL, *w2 = NULL, *w3 = NULL;
+    int found1, found2, found3;
     unsigned long long n_value, cap_value;
 
-    if (scanf("%99s %99s", buf1, buf2) != 2){
-        print_status_error(STATUS_INPUT_ERROR);
-        return 1;
-    }
+    st = read_word(stdin, &w1, &found1);
+    if (st == STATUS_OK)
+        st = read_word(stdin, &w2, &found2);
+    if (st == STATUS_OK && (!found1 || !found2))
+        st = STATUS_INPUT_ERROR;
 
-    if ((st = check_number(buf1, &n_value)) != STATUS_OK){
-        print_status_error(st);
-        return 1;
-    }
+    if (st == STATUS_OK)
+        st = check_number(w1, &n_value);
+    if (st == STATUS_OK)
+        st = check_number(w2, &cap_value);
 
-    if ((st = check_number(buf2, &cap_value)) != STATUS_OK){
+    free(w1);
+    free(w2);
+    w1 = w2 = NULL;
+
+    if (st != STATUS_OK){
         print_status_error(st);
         return 1;
     }
 
     if (n_value == 0){
         printf("Количество файлов должно быть положительным.\n");
+        return 1;
+    }
+
+    if (n_value > (size_t)-1 / sizeof(Input_file)){
+        print_status_error(STATUS_OVERFLOW);
         return 1;
     }
 
@@ -224,36 +286,42 @@ int main(void){
     for (size_t i = 0; i < n; i++){
         unsigned long long size_value, importance_value;
 
-        if (scanf("%99s %99s %99s", buf1, buf2, buf3) != 3){
-            print_status_error(STATUS_INPUT_ERROR);
-            free_files(input_files, n);
-            return 1;
-        }
+        w1 = w2 = w3 = NULL;
+        st = read_word(stdin, &w1, &found1);
+        if (st == STATUS_OK)
+            st = read_word(stdin, &w2, &found2);
+        if (st == STATUS_OK)
+            st = read_word(stdin, &w3, &found3);
+        if (st == STATUS_OK && (!found1 || !found2 || !found3))
+            st = STATUS_INPUT_ERROR;
 
-        if ((st = check_number(buf2, &size_value)) != STATUS_OK ||
-            (st = check_number(buf3, &importance_value)) != STATUS_OK){
-            print_status_error(st);
-            free_files(input_files, n);
-            return 1;
-        }
+        if (st == STATUS_OK)
+            st = check_number(w2, &size_value);
+        if (st == STATUS_OK)
+            st = check_number(w3, &importance_value);
 
-        if (size_value == 0){
+        free(w2);
+        free(w3);
+
+        if (st == STATUS_OK && size_value == 0){
             printf("Размер файла должен быть положительным.\n");
+            free(w1);
             free_files(input_files, n);
             return 1;
         }
 
-        input_files[i].name_file = malloc(strlen(buf1) + 1);
-        if (input_files[i].name_file == NULL){
-            print_status_error(STATUS_MEMORY_ERROR);
+        if (st != STATUS_OK){
+            print_status_error(st);
+            free(w1);
             free_files(input_files, n);
             return 1;
         }
-        strcpy(input_files[i].name_file, buf1);
+
+        input_files[i].name_file = w1;         
         input_files[i].size_file = (size_t)size_value;
         input_files[i].importance = importance_value;
     }
-    
+
     Backup_result res;
 
     st = search(input_files, n, capacity, &res);
@@ -269,7 +337,7 @@ int main(void){
     for (size_t i = 0; i < res.count; i++)
         printf("%s\n", res.files[i].name_file);
 
-    free(res.files);           
+    free(res.files);
     free_files(input_files, n);
     return 0;
 }
