@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <stdarg.h>
+#define RESULT_CAP 256
 
 typedef enum{
     STATUS_OK,
@@ -35,7 +36,7 @@ Status buffer_init(Buffer *b){
 Status buffer_push(Buffer *b, char c){
     if (b == NULL)
         return STATUS_NULL_ARGUMENT;
-    if (b->len + 1 >= b->cap){               
+    if (b->len + 1 >= b->cap){
         if (b->cap > (size_t)-1 / 2)
             return STATUS_MEMORY_ERROR;
         char *tmp = realloc(b->data, b->cap * 2);
@@ -58,6 +59,13 @@ Status buffer_append(Buffer *b, const char *s){
             return st;
     }
     return STATUS_OK;
+}
+
+size_t string_length(const char *str){
+    size_t n = 0;
+    while (str[n] != '\0')
+        n++;
+    return n;
 }
 
 Status flag_Ro(int val, Buffer *out){
@@ -85,21 +93,28 @@ Status flag_Zr(unsigned int val, Buffer *out){
     if (out == NULL)
         return STATUS_NULL_ARGUMENT;
 
-    unsigned long long fib[64];
-    size_t n = 0;
+    size_t max_count = 2 * sizeof(val) * CHAR_BIT + 2;
 
+    unsigned long long *fib = malloc(max_count * sizeof(*fib));
+    char *bits = malloc(max_count * sizeof(*bits));
+    if (fib == NULL || bits == NULL){
+        free(fib);
+        free(bits);
+        return STATUS_MEMORY_ERROR;
+    }
+
+    size_t n = 0;
     if (val >= 1)
         fib[n++] = 1;
     if (val >= 2)
         fib[n++] = 2;
-    while (n >= 2 && fib[n - 1] + fib[n - 2] <= val){
+    while (n >= 2 && n < max_count && fib[n - 1] + fib[n - 2] <= val){
         fib[n] = fib[n - 1] + fib[n - 2];
         n++;
     }
 
-    char bits[64];
     unsigned long long rest = val;
-    for (size_t i = n; i > 0; i--){          
+    for (size_t i = n; i > 0; i--){
         if (fib[i - 1] <= rest){
             bits[i - 1] = '1';
             rest -= fib[i - 1];
@@ -108,12 +123,15 @@ Status flag_Zr(unsigned int val, Buffer *out){
         }
     }
 
-    for (size_t i = 0; i < n; i++){          
-        Status st = buffer_push(out, bits[i]);
-        if (st != STATUS_OK)
-            return st;
-    }
-    return buffer_push(out, '1');             
+    Status st = STATUS_OK;
+    for (size_t i = 0; i < n && st == STATUS_OK; i++)
+        st = buffer_push(out, bits[i]);
+    if (st == STATUS_OK)
+        st = buffer_push(out, '1');
+
+    free(fib);
+    free(bits);
+    return st;
 }
 
 Status flag_Cv(int val, int base, int upper, Buffer *out){
@@ -124,7 +142,12 @@ Status flag_Cv(int val, int base, int upper, Buffer *out){
         base = 10;
 
     const char *digits = upper ? "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" : "0123456789abcdefghijklmnopqrstuvwxyz";
-    char res[40];
+
+    size_t max_digits = sizeof(val) * CHAR_BIT;
+    char *res = malloc(max_digits * sizeof(*res));
+    if (res == NULL)
+        return STATUS_MEMORY_ERROR;
+
     int count = 0;
     int v = val;
 
@@ -132,24 +155,20 @@ Status flag_Cv(int val, int base, int upper, Buffer *out){
         res[count++] = '0';
     while (v != 0){
         int d = v % base;
-        if (d < 0)                          
+        if (d < 0)
             d = -d;
         res[count++] = digits[d];
         v /= base;
     }
 
-    Status st;
-    if (val < 0){
+    Status st = STATUS_OK;
+    if (val < 0)
         st = buffer_push(out, '-');
-        if (st != STATUS_OK)
-            return st;
-    }
-    while (count > 0){
+    while (st == STATUS_OK && count > 0)
         st = buffer_push(out, res[--count]);
-        if (st != STATUS_OK)
-            return st;
-    }
-    return STATUS_OK;
+
+    free(res);
+    return st;
 }
 
 Status flag_to(const char *val, int base, int upper, Buffer *out){
@@ -193,7 +212,11 @@ Status flag_to(const char *val, int base, int upper, Buffer *out){
     if (negative)
         num = -num;
 
-    char res[40];
+    size_t max_digits = sizeof(num) * CHAR_BIT;
+    char *res = malloc(max_digits * sizeof(*res));
+    if (res == NULL)
+        return STATUS_MEMORY_ERROR;
+
     int count = 0;
     long long v = num;
     if (v == 0)
@@ -205,18 +228,15 @@ Status flag_to(const char *val, int base, int upper, Buffer *out){
         res[count++] = (char)('0' + d);
         v /= 10;
     }
-    Status st;
-    if (num < 0){
+
+    Status st = STATUS_OK;
+    if (num < 0)
         st = buffer_push(out, '-');
-        if (st != STATUS_OK)
-            return st;
-    }
-    while (count > 0){
+    while (st == STATUS_OK && count > 0)
         st = buffer_push(out, res[--count]);
-        if (st != STATUS_OK)
-            return st;
-    }
-    return STATUS_OK;
+
+    free(res);
+    return st;
 }
 
 Status dump_bytes(const void *ptr, size_t n, Buffer *out){
@@ -240,6 +260,31 @@ Status dump_bytes(const void *ptr, size_t n, Buffer *out){
     return STATUS_OK;
 }
 
+Status append_formatted(Buffer *out, const char *spec, ...){
+    va_list ap, ap2;
+    va_start(ap, spec);
+    va_copy(ap2, ap);
+    int n = vsnprintf(NULL, 0, spec, ap);     
+    va_end(ap);
+
+    if (n < 0){
+        va_end(ap2);
+        return STATUS_OUTPUT_ERROR;
+    }
+
+    char *tmp = malloc((size_t)n + 1);
+    if (tmp == NULL){
+        va_end(ap2);
+        return STATUS_MEMORY_ERROR;
+    }
+    vsnprintf(tmp, (size_t)n + 1, spec, ap2);
+    va_end(ap2);
+
+    Status st = buffer_append(out, tmp);
+    free(tmp);
+    return st;
+}
+
 Status flag_standard(const char *format, size_t *l, va_list *values, Buffer *out){
     size_t i = *l + 1;
 
@@ -248,14 +293,18 @@ Status flag_standard(const char *format, size_t *l, va_list *values, Buffer *out
         return buffer_push(out, '%');
     }
 
-    const char *allowed = "-+ #.0123456789hlL";  
-    char spec[32];
+    size_t spec_cap = string_length(format + i) + 3;
+    char *spec = malloc(spec_cap);
+    if (spec == NULL)
+        return STATUS_MEMORY_ERROR;
+
+    const char *allowed = "-+ #.0123456789hlL";
     size_t s = 0;
     spec[s++] = '%';
 
     int longs = 0;
     int big = 0;
-    while (format[i] != '\0' && s < 28){
+    while (format[i] != '\0'){
         int ok = 0;
         for (size_t k = 0; allowed[k] != '\0'; k++)
             if (format[i] == allowed[k])
@@ -273,50 +322,49 @@ Status flag_standard(const char *format, size_t *l, va_list *values, Buffer *out
     spec[s++] = conv;
     spec[s] = '\0';
 
-    char tmp[512];
-    int n;
+    Status st;
 
     switch (conv){
         case 'd': case 'i':
-            if (longs == 0)      
-                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, int));
-            else if (longs == 1) 
-                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, long));
-            else                 
-                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, long long));
+            if (longs == 0)
+                st = append_formatted(out, spec, va_arg(*values, int));
+            else if (longs == 1)
+                st = append_formatted(out, spec, va_arg(*values, long));
+            else
+                st = append_formatted(out, spec, va_arg(*values, long long));
             break;
         case 'u': case 'o': case 'x': case 'X':
-            if (longs == 0)      
-                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned int));
-            else if (longs == 1) 
-                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned long));
-            else                 
-                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned long long));
+            if (longs == 0)
+                st = append_formatted(out, spec, va_arg(*values, unsigned int));
+            else if (longs == 1)
+                st = append_formatted(out, spec, va_arg(*values, unsigned long));
+            else
+                st = append_formatted(out, spec, va_arg(*values, unsigned long long));
             break;
         case 'c':
-            n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, int));
+            st = append_formatted(out, spec, va_arg(*values, int));
             break;
         case 's':
-            n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, const char *));
+            st = append_formatted(out, spec, va_arg(*values, const char *));
             break;
         case 'p':
-            n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, void *));
+            st = append_formatted(out, spec, va_arg(*values, void *));
             break;
         case 'f': case 'F': case 'e': case 'E': case 'g': case 'G':
             if (big)
-                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, long double));
+                st = append_formatted(out, spec, va_arg(*values, long double));
             else
-                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, double));
+                st = append_formatted(out, spec, va_arg(*values, double));
             break;
         default:
-            return STATUS_INVALID_FORMAT;
+            st = STATUS_INVALID_FORMAT;
+            break;
     }
 
-    if (n < 0)
-        return STATUS_OUTPUT_ERROR;
-
-    *l = i;
-    return buffer_append(out, tmp);
+    free(spec);
+    if (st == STATUS_OK)
+        *l = i;
+    return st;
 }
 
 Status format_to_buffer(const char *format, va_list *values, Buffer *out){
@@ -368,7 +416,7 @@ Status format_to_buffer(const char *format, va_list *values, Buffer *out){
             st = dump_bytes(&value, sizeof(value), out);
             l += 2;
         } else if (a == 'm' && b == 'f'){
-            float value = (float)va_arg(*values, double);   
+            float value = (float)va_arg(*values, double);
             st = dump_bytes(&value, sizeof(value), out);
             l += 2;
         } else {
@@ -427,18 +475,74 @@ Status oversprintf(char *str, const char *format, ...){
     return st;
 }
 
+
+void print_status_error(Status status){
+    switch (status){
+        case STATUS_NULL_ARGUMENT:  printf("Внутренняя ошибка: нулевой указатель.\n"); break;
+        case STATUS_RIM_NUM_LIMIT:  printf("Ошибка: римскими цифрами записываются числа от 1 до 3999.\n"); break;
+        case STATUS_INVALID_NUMBER: printf("Ошибка: некорректное число для заданной системы счисления.\n"); break;
+        case STATUS_INVALID_FORMAT: printf("Ошибка: некорректный спецификатор формата.\n"); break;
+        case STATUS_OUTPUT_ERROR:   printf("Ошибка вывода.\n"); break;
+        case STATUS_MEMORY_ERROR:   printf("Ошибка: не удалось выделить память.\n"); break;
+        case STATUS_OVERFLOW:       printf("Ошибка: переполнение.\n"); break;
+        case STATUS_OK:             break;
+        default:                    printf("Ошибка.\n"); break;
+    }
+}
+
 int main(void){
-    overfprintf(stdout, "Ro: %Ro | Zr: %Zr\n", 1994, 100);
-    overfprintf(stdout, "Cv: %Cv | CV: %CV | -255 по осн. 2: %Cv\n", 255, 16, 255, 16, -255, 2);
-    overfprintf(stdout, "to: %to | TO: %TO\n", "ff", 16, "FF", 16);
-    overfprintf(stdout, "mi: %mi\nmu: %mu\nmf: %mf\nmd: %md\n", -1, 1u, 1.0f, 1.0);
+    Status st;
 
-    char result[200];
-    if (oversprintf(result, "Станд.: %d %5.2f %s %c %%", 42, 3.14159, "hi", 'x') == STATUS_OK)
-        printf("%s\n", result);
+    st = overfprintf(stdout, "Zr: %Zr | Ro: %Ro\n", 100, 1994);
+    if (st != STATUS_OK){
+        print_status_error(st);
+        return 1;
+    }
 
-    if (overfprintf(stdout, "%Ro\n", 0) != STATUS_OK)
-        printf("Ошибка: 0 нельзя записать римскими цифрами.\n");
+    st = overfprintf(stdout, "Cv: %Cv | CV: %CV | -255 по осн. 2: %Cv\n", 255, 16, 255, 16, -255, 2);
+    if (st != STATUS_OK){
+        print_status_error(st);
+        return 1;
+    }
+
+    st = overfprintf(stdout, "to: %to | TO: %TO\n", "ff", 16, "FF", 16);
+    if (st != STATUS_OK){
+        print_status_error(st);
+        return 1;
+    }
+
+    st = overfprintf(stdout, "mi: %mi\nmu: %mu\nmf: %mf\nmd: %md\n", -1, 1u, 1.0f, 1.0);
+    if (st != STATUS_OK){
+        print_status_error(st);
+        return 1;
+    }
+
+    char *result = malloc(RESULT_CAP * sizeof(*result));
+    if (result == NULL){
+        print_status_error(STATUS_MEMORY_ERROR);
+        return 1;
+    }
+
+    st = oversprintf(result, "Станд.: %d %5.2f %s %c %%", 42, 3.14159, "hi", 'x');
+    if (st != STATUS_OK){
+        print_status_error(st);
+        free(result);
+        return 1;
+    }
+    printf("%s\n", result);
+    free(result);
+
+    st = overfprintf(stdout, "%Ro\n", 0);
+    if (st != STATUS_OK)
+        print_status_error(st);
+
+    st = overfprintf(stdout, "%to\n", "zz", 16);
+    if (st != STATUS_OK)
+        print_status_error(st);
+
+    st = overfprintf(stdout, "%y\n", 1);
+    if (st != STATUS_OK)
+        print_status_error(st);
 
     return 0;
 }
