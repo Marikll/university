@@ -422,7 +422,7 @@ Status oversprintf(char *str, const char *format, ...){
 }
 
 int main(void){
-    overfprintf(stdout, "Ro: %Ro | Zr: %Zr %Zr\n", 1994, 100, 9u);
+    overfprintf(stdout, "Ro: %Ro | Zr: %Zr\n", 1994, 100);
     overfprintf(stdout, "Cv: %Cv | CV: %CV | -255 по осн. 2: %Cv\n", 255, 16, 255, 16, -255, 2);
     overfprintf(stdout, "to: %to | TO: %TO\n", "ff", 16, "FF", 16);
     overfprintf(stdout, "mi: %mi\nmu: %mu\nmf: %mf\nmd: %md\n", -1, 1u, 1.0f, 1.0);
