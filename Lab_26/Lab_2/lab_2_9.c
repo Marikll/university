@@ -3,7 +3,8 @@
 #include <stdarg.h>
 #include <math.h>
 
-#define MAX_DIGITS 9   
+#define MAX_DEN 1000000ULL      /* максимальный знаменатель при подборе дроби */
+#define EPS_MAX 1e-12           /* eps больше этого значения даёт ложные дроби */
 
 typedef enum{
     STATUS_OK,
@@ -11,8 +12,8 @@ typedef enum{
     STATUS_INVALID_BASE,
     STATUS_INVALID_EPS,
     STATUS_INVALID_COUNT,
-    STATUS_INVALID_NUMBER,  
-    STATUS_NOT_DECIMAL,       
+    STATUS_INVALID_NUMBER,    /* не число или не из (0; 1) */
+    STATUS_NO_FRACTION,       /* не удалось подобрать дробь со знаменателем <= MAX_DEN */
     STATUS_MEMORY_ERROR
 } Status;
 
@@ -25,37 +26,35 @@ unsigned long long gcd(unsigned long long a, unsigned long long b){
     return a;
 }
 
+/* Одно число: *finite = 1, если x в системе base записывается конечно */
 Status is_finite_fraction(double x, int base, double eps, int *finite){
     if (finite == NULL)
         return STATUS_NULL_ARGUMENT;
     if (base < 2 || base > 36)
         return STATUS_INVALID_BASE;
-    if (eps <= 0.0)
+    if (!isfinite(eps) || eps <= 0.0 || eps > EPS_MAX)
         return STATUS_INVALID_EPS;
-    if (x <= eps || x >= 1.0 - eps)
+    if (!isfinite(x) || x <= 0.0 || x >= 1.0)
         return STATUS_INVALID_NUMBER;
 
-    unsigned long long den = 1;
-    double scaled = x;
-    int found = 0;
+    unsigned long long num = 0;
+    unsigned long long den = 0;
 
-    for (int k = 0; k < MAX_DIGITS; k++){
-        scaled *= 10.0;
-        den *= 10;
-        if (fabs(scaled - floor(scaled + 0.5)) <= eps){
-            found = 1;
+    /* подбираем p/q, совпадающую с x с точностью eps */
+    for (unsigned long long q = 2; q <= MAX_DEN; q++){
+        double p = floor(x * (double)q + 0.5);
+        if (p >= 1.0 && fabs(x - p / (double)q) <= eps){
+            num = (unsigned long long)p;
+            den = q;
             break;
         }
     }
-    if (!found)
-        return STATUS_NOT_DECIMAL;
+    if (den == 0)
+        return STATUS_NO_FRACTION;
 
-    unsigned long long num = (unsigned long long)floor(scaled + 0.5);
-    if (num == 0)
-        return STATUS_INVALID_NUMBER;
+    den /= gcd(num, den);                      /* сократили дробь, den >= 2 */
 
-    den /= gcd(num, den);                 
-
+    /* убираем из знаменателя все простые множители, общие с base */
     unsigned long long g = gcd(den, (unsigned long long)base);
     while (g > 1){
         while (den % g == 0)
@@ -67,17 +66,24 @@ Status is_finite_fraction(double x, int base, double eps, int *finite){
     return STATUS_OK;
 }
 
+/*
+ * base    - основание системы счисления
+ * eps     - точность
+ * count   - сколько чисел типа double передано после results
+ * results - массив из count значений (1 - конечное, 0 - бесконечное),
+ *           память выделяется внутри, освобождает вызывающий код
+ */
 Status finite_representation(int base, double eps, size_t count, int **results, ...){
     if (results == NULL)
         return STATUS_NULL_ARGUMENT;
     if (base < 2 || base > 36)
         return STATUS_INVALID_BASE;
-    if (eps <= 0.0)
+    if (!isfinite(eps) || eps <= 0.0 || eps > EPS_MAX)
         return STATUS_INVALID_EPS;
-    if (count == 0 || count > (size_t)-1 / sizeof(int))
+    if (count == 0 || count > (size_t)-1 / sizeof(**results))
         return STATUS_INVALID_COUNT;
 
-    int *res = malloc(count * sizeof(int));
+    int *res = malloc(count * sizeof(*res));
     if (res == NULL)
         return STATUS_MEMORY_ERROR;
 
@@ -104,15 +110,17 @@ void print_status_error(Status status){
     switch (status){
         case STATUS_NULL_ARGUMENT:  printf("Внутренняя ошибка: нулевой указатель.\n"); break;
         case STATUS_INVALID_BASE:   printf("Ошибка: основание должно быть в диапазоне [2, 36].\n"); break;
-        case STATUS_INVALID_EPS:    printf("Ошибка: эпсилон должен быть положительным.\n"); break;
+        case STATUS_INVALID_EPS:    printf("Ошибка: эпсилон должен быть конечным числом из (0; 1e-12].\n"); break;
         case STATUS_INVALID_COUNT:  printf("Ошибка: некорректное количество чисел.\n"); break;
-        case STATUS_INVALID_NUMBER: printf("Ошибка: число должно быть из интервала (0; 1).\n"); break;
-        case STATUS_NOT_DECIMAL:    printf("Ошибка: число не является конечной десятичной дробью.\n"); break;
+        case STATUS_INVALID_NUMBER: printf("Ошибка: число должно быть вещественным из интервала (0; 1).\n"); break;
+        case STATUS_NO_FRACTION:    printf("Ошибка: не удалось представить число обыкновенной дробью с малым знаменателем.\n"); break;
         case STATUS_MEMORY_ERROR:   printf("Ошибка: не удалось выделить память.\n"); break;
+        case STATUS_OK:             break;
         default:                    printf("Ошибка.\n"); break;
     }
 }
 
+/* вывод отделён от вычислений */
 void print_results(int base, const double *values, const int *results, size_t count){
     printf("Основание %d:\n", base);
     for (size_t i = 0; i < count; i++)
@@ -120,11 +128,11 @@ void print_results(int base, const double *values, const int *results, size_t co
 }
 
 int main(void){
-    const double eps = 1e-9;
+    const double eps = 1e-12;
     int *res = NULL;
     Status st;
 
-    const double v1[] = {0.5, 0.25, 0.1, 0.2};
+    const double v1[] = {0.5, 0.25, 0.1, 1.0 / 3.0};
     st = finite_representation(10, eps, 4, &res, v1[0], v1[1], v1[2], v1[3]);
     if (st == STATUS_OK){ print_results(10, v1, res, 4); free(res); }
     else print_status_error(st);
@@ -146,10 +154,32 @@ int main(void){
     if (st == STATUS_OK){ print_results(15, v2, res, 3); free(res); }
     else print_status_error(st);
 
+    /* ожидаемые ошибки: должен напечататься текст каждой */
     st = finite_representation(1, eps, 1, &res, 0.5);
     if (st != STATUS_OK) print_status_error(st);
 
     st = finite_representation(10, eps, 2, &res, 0.5, 1.5);
+    if (st != STATUS_OK) print_status_error(st);
+
+    st = finite_representation(10, eps, 1, &res, NAN);
+    if (st != STATUS_OK) print_status_error(st);
+
+    st = finite_representation(10, eps, 1, &res, 0.0);
+    if (st != STATUS_OK) print_status_error(st);
+
+    st = finite_representation(10, 0.0, 1, &res, 0.5);
+    if (st != STATUS_OK) print_status_error(st);
+
+    st = finite_representation(10, 0.1, 1, &res, 0.5);
+    if (st != STATUS_OK) print_status_error(st);
+
+    st = finite_representation(10, eps, 0, &res);
+    if (st != STATUS_OK) print_status_error(st);
+
+    st = finite_representation(10, eps, 1, &res, 0.1234567891234);
+    if (st != STATUS_OK) print_status_error(st);
+
+    st = finite_representation(10, eps, 1, (int **)NULL, 0.5);
     if (st != STATUS_OK) print_status_error(st);
 
     return 0;
