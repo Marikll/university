@@ -278,14 +278,20 @@ Status flag_standard(const char *format, size_t *l, va_list *values, Buffer *out
 
     switch (conv){
         case 'd': case 'i':
-            if (longs == 0)      n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, int));
-            else if (longs == 1) n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, long));
-            else                 n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, long long));
+            if (longs == 0)      
+                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, int));
+            else if (longs == 1) 
+                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, long));
+            else                 
+                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, long long));
             break;
         case 'u': case 'o': case 'x': case 'X':
-            if (longs == 0)      n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned int));
-            else if (longs == 1) n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned long));
-            else                 n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned long long));
+            if (longs == 0)      
+                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned int));
+            else if (longs == 1) 
+                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned long));
+            else                 
+                n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, unsigned long long));
             break;
         case 'c':
             n = snprintf(tmp, sizeof(tmp), spec, va_arg(*values, int));
