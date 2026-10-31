@@ -462,65 +462,32 @@ const char *get_status_message(Status st) {
 }
 
 int main(void){
-    int roman = 0, num = 0, plain = 0;
-    char line[256], name[256];
-    Status st;
+    int roman, num, plain;
+    unsigned int zeck;
+    double real;
 
-    const char *fmt = "%Ro %*Zr %Cv %d";     
-
-    printf("1 - строка (oversscanf), 2 - файл (overfscanf), 3 - прямо из stdin (overfscanf): ");
-    if (fgets(line, sizeof(line), stdin) == NULL){
-        printf("Ошибка ввода.\n");
-        return 1;
-    }
-
-    if (line[0] == '1'){
-        printf("Введите, например: MCMXCIV 1011 ff 255\n");
-        if (fgets(line, sizeof(line), stdin) == NULL){
-            printf("Ошибка ввода.\n");
-            return 1;
-        }
-        st = oversscanf(line, fmt, &roman, &num, 16, &plain);
-
-    } else if (line[0] == '2'){
-        printf("Имя файла: ");
-        if (fgets(name, sizeof(name), stdin) == NULL){
-            printf("Ошибка ввода.\n");
-            return 1;
-        }
-        size_t k = 0;
-        while (name[k] != '\0' && name[k] != '\n')
-            k++;
-        name[k] = '\0';                    
-
-        st = check_file_extension(name);
-        if (st != STATUS_OK){
-            printf("Недопустимое расширение файла.\n");
-            return 1;
-        }
-        FILE *f = fopen(name, "r");
-        if (f == NULL){
-            printf("Не удалось открыть файл.\n");
-            return 1;
-        }
-        st = overfscanf(f, fmt, &roman, &num, 16, &plain);
-        fclose(f);
-
-    } else if (line[0] == '3'){
-        printf("Введите, например: MCMXCIV 1011 ff 255\n");
-        st = overfscanf(stdin, fmt, &roman, &num, 16, &plain);
-
-    } else {
-        printf("Неизвестный режим.\n");
-        return 1;
-    }
-
+    /* из строки */
+    Status st = oversscanf("MCMXCIV 1011 ff 255 3.5", "%Ro %Zr %Cv %d %lf", &roman, &zeck, &num, 16, &plain, &real);
     if (st == STATUS_OK)
-        printf("Ro=%d Cv=%d d=%d\n", roman, num, plain);
-    else{
-        printf("%s\n", get_status_message(st));
+        printf("Ro=%d Zr=%u Cv=%d d=%d f=%.1f\n", roman, zeck, num, plain, real);
+    else
+        printf("Ошибка, код %d\n", st);
+
+    /* из файла */
+    FILE *f = tmpfile();
+    if (f == NULL){
+        printf("Не удалось создать файл.\n");
         return 1;
     }
+    fputs("XIV 100011 -FF 42", f);
+    rewind(f);
 
+    st = overfscanf(f, "%Ro %Zr %CV %d", &roman, &zeck, &num, 16, &plain);
+    if (st == STATUS_OK)
+        printf("Ro=%d Zr=%u CV=%d d=%d\n", roman, zeck, num, plain);
+    else
+        printf("Ошибка, код %d\n", st);
+
+    fclose(f);
     return 0;
 }
